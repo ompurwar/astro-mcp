@@ -320,7 +320,7 @@ def dashas(
     running = [
         {
             "level": "Mahadasha" if len(lords) == 1 else "Antardasha",
-            "lord": PLANET_NAMES[lords[0]],
+            "lord": PLANET_NAMES[lords[-1]],
             "start": _tuple_iso(start, offset),
             "end": _tuple_iso(end, offset),
         }

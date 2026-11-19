@@ -70,6 +70,25 @@ def test_dashas_varanasi_reference():
     assert result["running"][1]["end"].startswith("2027-02-10")
 
 
+def test_running_antardasha_uses_child_lord():
+    # Jupiter mahadasha, Saturn antardasha on 20 Nov 2026.
+    result = dashas(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+        as_of="2026-11-20",
+    )
+
+    assert [period["lord"] for period in result["running"]] == [
+        "Jupiter",
+        "Saturn",
+    ]
+    assert result["running"][1]["start"].startswith("2026-02-17")
+    assert result["running"][1]["end"].startswith("2028-09-02")
+
+
 def test_dashas_rejects_as_of_before_birth():
     with pytest.raises(ValueError):
         dashas("1990-01-01", "12:00", as_of="1989-12-31")
