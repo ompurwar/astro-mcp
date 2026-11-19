@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "astro-mcp"
+version = "0.1.0"
+description = "Vedic panchang and jyotish tools exposed over MCP"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+    "pyjhora==5.0.0",
+    "pyswisseph>=2.10",
+    "numpy>=2.0",
+    "pytz",
+    "python-dateutil",
+    "timezonefinder",
+    "geocoder",
+    "geopy",
+    "certifi",
+    "requests",
+    "mcp[cli]>=2.3,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9"]
+
+[project.scripts]
+astro-mcp = "astro_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/astro_mcp"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

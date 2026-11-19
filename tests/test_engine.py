@@ -1,0 +1,99 @@
+import os
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+from astro_mcp.engine import (
+    PLANET_NAMES,
+    dashas,
+    kundli,
+    muhurta,
+    panchang,
+)
+
+
+def test_panchang_varanasi_matches_drik_reference():
+    # Reference: Drik Panchang, Varanasi, 20 Nov 2026 (sunrise-based day).
+    result = panchang("2026-11-20")
+
+    assert result["vara"]["name"] == "Friday"
+    assert result["tithi"]["name"] == "Dashami"
+    assert result["tithi"]["paksha"] == "Shukla"
+    assert result["tithi"]["end"].startswith("2026-11-20T07:1")
+    assert result["nakshatra"]["name"] == "Purva Bhadrapada"
+    assert result["nakshatra"]["pada"] == 4
+    assert result["nakshatra"]["start"].startswith("2026-11-19T06:10")
+    start = datetime.fromisoformat(result["nakshatra"]["start"])
+    end = datetime.fromisoformat(result["nakshatra"]["end"])
+    assert 20 < (end - start).total_seconds() / 3600 < 28
+    assert result["yoga"]["name"] == "Harshana"
+    assert result["karana"]["name"] == "Gara"
+    assert result["sunrise"].startswith("2026-11-20T06:2")
+    assert result["sunset"].startswith("2026-11-20T17:0")
+
+
+def test_kundli_varanasi_reference():
+    result = kundli("1990-01-01", "12:00")
+
+    assert result["lagna"] == {
+        "sign": "Pisces",
+        "degree": 21.45,
+        "nakshatra": "Revati",
+        "pada": 2,
+    }
+
+    planets = {planet["name"]: planet for planet in result["planets"]}
+    assert tuple(planets) == PLANET_NAMES
+    assert planets["Sun"]["sign"] == "Sagittarius"
+    assert planets["Sun"]["house"] == 10
+    assert planets["Moon"]["nakshatra"] == "Dhanishta"
+    assert planets["Moon"]["pada"] == 4
+    assert planets["Mercury"]["house"] == 11
+    assert planets["Mercury"]["retrograde"] is True
+    assert all(1 <= planet["house"] <= 12 for planet in planets.values())
+
+
+def test_dashas_varanasi_reference():
+    result = dashas("1990-01-01", "12:00", as_of="2026-11-20")
+
+    assert result["balance_at_birth"] == {"years": 0, "months": 1, "days": 7}
+    assert len(result["mahadashas"]) == 9
+    assert result["mahadashas"][0]["lord"] == "Mars"
+    assert [period["lord"] for period in result["running"]] == [
+        "Saturn",
+        "Saturn",
+    ]
+    assert result["running"][0]["start"].startswith("2024-02-08")
+    assert result["running"][1]["end"].startswith("2027-02-10")
+
+
+def test_dashas_rejects_as_of_before_birth():
+    with pytest.raises(ValueError):
+        dashas("1990-01-01", "12:00", as_of="1989-12-31")
+
+
+def test_muhurta_varanasi_reference():
+    result = muhurta("2026-11-20")
+
+    assert result["rahu_kaalam"]["start"].startswith("2026-11-20T10:23")
+    assert result["yamagandam"]["start"].startswith("2026-11-20T14:24")
+    assert result["gulika"]["start"].startswith("2026-11-20T07:42")
+    assert result["abhijit"]["start"].startswith("2026-11-20T11:22")
+    assert result["brahma"]["start"].startswith("2026-11-20T04:36")
+    assert len(result["durmuhurtam"]) == 2
+
+
+def test_import_keeps_stdout_clean():
+    src = str(Path(__file__).resolve().parents[1] / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", "import astro_mcp.engine"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": src},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
