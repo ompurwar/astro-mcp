@@ -45,13 +45,25 @@ SunriseConvention = Annotated[
         )
     ),
 ]
+AsOfTimezone = Annotated[
+    str | float | None,
+    Field(
+        description=(
+            "IANA timezone or fixed UTC offset used for the default as_of "
+            "date; defaults to the birth timezone."
+        )
+    ),
+]
 
 server = MCPServer(
     "astro-mcp",
-    version="0.3.0",
+    version="0.3.1",
     instructions=(
-        "Vedic panchang calculations using Drik ganita and Lahiri ayanamsa. "
-        "Defaults to Varanasi; pass coordinates for another place."
+        "Vedic astrology using Drik ganita and a selectable ayanamsa "
+        "(Lahiri by default). Panchang, kundli, varga charts, bhava "
+        "chalit, Vimshottari and Yogini dashas, transits with Sade Sati, "
+        "yogas and doshas, Shadbala and Ashtakavarga, guna milan and "
+        "muhurta. Defaults to Varanasi; pass coordinates for another place."
     ),
 )
 
@@ -171,6 +183,7 @@ def get_dashas(
             )
         ),
     ] = None,
+    as_of_timezone: AsOfTimezone = None,
     depth: Annotated[
         int,
         Field(
@@ -195,6 +208,7 @@ def get_dashas(
         timezone=timezone,
         location_name=location_name,
         as_of=as_of,
+        as_of_timezone=as_of_timezone,
         depth=depth,
         ayanamsa=ayanamsa,
     )
@@ -314,6 +328,7 @@ def get_transits(
     as_of_time: Annotated[
         str, Field(description="Transit time in 24-hour HH:MM format.")
     ] = "12:00",
+    as_of_timezone: AsOfTimezone = None,
     latitude: Annotated[
         float, Field(description="Latitude in degrees; north is positive.")
     ] = DEFAULT_LATITUDE,
@@ -344,6 +359,7 @@ def get_transits(
         time=time,
         as_of=as_of,
         as_of_time=as_of_time,
+        as_of_timezone=as_of_timezone,
         latitude=latitude,
         longitude=longitude,
         timezone=timezone,
@@ -414,6 +430,7 @@ def get_yogini_dashas(
             )
         ),
     ] = None,
+    as_of_timezone: AsOfTimezone = None,
     depth: Annotated[
         int,
         Field(
@@ -455,6 +472,7 @@ def get_yogini_dashas(
         timezone=timezone,
         location_name=location_name,
         as_of=as_of,
+        as_of_timezone=as_of_timezone,
         depth=depth,
         ayanamsa=ayanamsa,
     )
@@ -486,7 +504,7 @@ def get_strength(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
 ) -> dict[str, Any]:
-    """Return Shadbala, bhava bala and Ashtakavarga bindus.
+    """Return Shadbala and Ashtakavarga bindus.
 
     Shadbala totals are in virupas; strength is the ratio to the required
     minimum. Ashtakavarga returns Sarvashtakavarga and Bhinnashtakavarga.

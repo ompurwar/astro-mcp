@@ -15,7 +15,7 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 | `get_dashas` | Vimshottari timeline, balance at birth, and the running chain down to pratyantar, sookshma, prana or deha. |
 | `get_yogini_dashas` | Yogini dasha timeline and running chain, with Yogini names and ruling planets. |
 | `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas. |
-| `get_strength` | Shadbala, bhava bala, Sarvashtakavarga and Bhinnashtakavarga bindus. |
+| `get_strength` | Shadbala, Sarvashtakavarga and Bhinnashtakavarga bindus. |
 | `get_matching` | North Indian Ashtakoota guna milan for two birth charts, scored out of 36. |
 | `get_muhurta` | Abhijit and Brahma muhurta, Rahu kaalam, Yamagandam, Gulika and Durmuhurtam. |
 
@@ -28,7 +28,7 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 - Sunrise: Hindu rising by default; optionally refraction or bottom limb
 - Houses: whole sign for D1; Sripati, KP/Placidus or equal for bhava chalit
 - Dasha: Vimshottari and Yogini, running chain to any depth from maha to deha
-- Strength: Shadbala, bhava bala and Ashtakavarga
+- Strength: Shadbala and Ashtakavarga
 - Matching: North Indian Ashtakoota, 36 points
 - Months and festivals (when added): purnimanta
 
@@ -37,7 +37,10 @@ fixed UTC offset in hours) and `location_name` to override the defaults. The
 chart tools (`get_panchang`, `get_kundli`, `get_varga`, `get_bhava_chalit`,
 `get_dashas`, `get_yogini_dashas`, `get_transits`, `get_yogas` and
 `get_strength`) also accept `ayanamsa`. `get_matching` takes two birth times
-and a timezone; coordinates are not needed for Moon-based guna milan.
+and a timezone; coordinates are not needed for Moon-based guna milan. The
+dasha and transit tools also accept `as_of_timezone` for the default `as_of`
+date, so "today" can follow the user's current timezone instead of the birth
+place's.
 
 ## Install
 

@@ -182,11 +182,18 @@ def _check_coordinates(latitude: float, longitude: float) -> None:
         raise ValueError("longitude must be between -180 and 180")
 
 
-def _offset_hours(tz: str | float, day: Date) -> float:
+def _offset_hours(tz: str | float, day: Date, hour: float = 12.0) -> float:
     if isinstance(tz, (int, float)):
         return float(tz)
+    total_minutes = int(round(hour * 60))
+    whole_hour, minute = divmod(total_minutes, 60)
     offset = datetime(
-        day.year, day.month, day.day, 12, tzinfo=ZoneInfo(tz)
+        day.year,
+        day.month,
+        day.day,
+        whole_hour,
+        minute,
+        tzinfo=ZoneInfo(tz),
     ).utcoffset()
     if offset is None:
         raise ValueError(f"Unknown timezone: {tz}")
@@ -202,6 +209,22 @@ def _iso(day: Date, hours: float, offset: float) -> str:
 
 def _birth_datetime(date: str, time: str) -> datetime:
     return datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+
+
+def _as_of_date(
+    as_of: str | None,
+    timezone: str | float,
+    offset: float,
+    as_of_timezone: str | float | None = None,
+) -> Date:
+    if as_of is not None:
+        return Date.fromisoformat(as_of)
+    tz = as_of_timezone if as_of_timezone is not None else timezone
+    if isinstance(tz, str):
+        return datetime.now(ZoneInfo(tz)).date()
+    return datetime.now(
+        fixed_timezone(timedelta(hours=float(tz)))
+    ).date()
 
 
 def _clean_html(value: str) -> str:
@@ -389,7 +412,9 @@ def kundli(
     birth = _birth_datetime(date, time)
     _check_coordinates(latitude, longitude)
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
@@ -464,7 +489,9 @@ def varga(
             f"Unsupported division: {division}. Supported: {sorted(VARGA_NAMES)}"
         )
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
@@ -546,7 +573,9 @@ def bhava_chalit(
         "equal": "Equal houses",
     }
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
@@ -651,6 +680,7 @@ def dashas(
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
     as_of: str | None = None,
+    as_of_timezone: str | float | None = None,
     depth: int = 2,
     ayanamsa: str = "LAHIRI",
 ) -> dict[str, Any]:
@@ -661,20 +691,15 @@ def dashas(
     if not 1 <= depth <= len(DASHA_LEVELS):
         raise ValueError(f"depth must be between 1 and {len(DASHA_LEVELS)}")
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     dob = (birth.year, birth.month, birth.day)
     tob = (birth.hour, birth.minute, birth.second)
     jd = utils.julian_day_number(dob, tob)
 
-    if as_of is not None:
-        as_of_day = Date.fromisoformat(as_of)
-    elif isinstance(timezone, str):
-        as_of_day = datetime.now(ZoneInfo(timezone)).date()
-    else:
-        as_of_day = datetime.now(
-            fixed_timezone(timedelta(hours=offset))
-        ).date()
+    as_of_day = _as_of_date(as_of, timezone, offset, as_of_timezone)
     if as_of_day < day:
         raise ValueError("as_of must not be before the birth date")
 
@@ -794,7 +819,9 @@ def _moon_details(
 ) -> dict[str, Any]:
     day = Date.fromisoformat(date)
     birth = _birth_datetime(date, time)
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
         (birth.hour, birth.minute, birth.second),
@@ -825,7 +852,10 @@ def matching(
     """Return North Indian Ashtakoota guna milan for two birth times."""
     boy = _moon_details(boy_date, boy_time, timezone, ayanamsa)
     girl = _moon_details(
-        girl_date, girl_time, girl_timezone or timezone, ayanamsa
+        girl_date,
+        girl_time,
+        girl_timezone if girl_timezone is not None else timezone,
+        ayanamsa,
     )
 
     ashtakoota = Ashtakoota(
@@ -886,6 +916,7 @@ def transits(
     time: str,
     as_of: str | None = None,
     as_of_time: str = "12:00",
+    as_of_timezone: str | float | None = None,
     latitude: float = DEFAULT_LATITUDE,
     longitude: float = DEFAULT_LONGITUDE,
     timezone: str | float = DEFAULT_TIMEZONE,
@@ -897,7 +928,9 @@ def transits(
     natal_birth = _birth_datetime(date, time)
     _check_coordinates(latitude, longitude)
 
-    natal_offset = _offset_hours(timezone, natal_day)
+    natal_offset = _offset_hours(
+        timezone, natal_day, natal_birth.hour + natal_birth.minute / 60
+    )
     natal_place = drik.Place(
         location_name, latitude, longitude, natal_offset
     )
@@ -906,19 +939,18 @@ def transits(
         (natal_birth.hour, natal_birth.minute, natal_birth.second),
     )
 
-    if as_of is not None:
-        target_day = Date.fromisoformat(as_of)
-    elif isinstance(timezone, str):
-        target_day = datetime.now(ZoneInfo(timezone)).date()
-    else:
-        target_day = datetime.now(
-            fixed_timezone(timedelta(hours=natal_offset))
-        ).date()
+    target_day = _as_of_date(
+        as_of, timezone, natal_offset, as_of_timezone
+    )
     if target_day < natal_day:
         raise ValueError("as_of must not be before the birth date")
 
     target_birth = _birth_datetime(target_day.isoformat(), as_of_time)
-    target_offset = _offset_hours(timezone, target_day)
+    target_offset = _offset_hours(
+        as_of_timezone if as_of_timezone is not None else timezone,
+        target_day,
+        target_birth.hour + target_birth.minute / 60,
+    )
     target_place = drik.Place(
         location_name, latitude, longitude, target_offset
     )
@@ -1018,7 +1050,9 @@ def yogas(
             f"Unsupported division: {division}. Supported: {sorted(VARGA_NAMES)}"
         )
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
@@ -1076,6 +1110,7 @@ def yogini_dashas(
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
     as_of: str | None = None,
+    as_of_timezone: str | float | None = None,
     depth: int = 2,
     ayanamsa: str = "LAHIRI",
 ) -> dict[str, Any]:
@@ -1086,20 +1121,15 @@ def yogini_dashas(
     if not 1 <= depth <= len(DASHA_LEVELS):
         raise ValueError(f"depth must be between 1 and {len(DASHA_LEVELS)}")
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     dob = (birth.year, birth.month, birth.day)
     tob = (birth.hour, birth.minute, birth.second)
     jd = utils.julian_day_number(dob, tob)
 
-    if as_of is not None:
-        as_of_day = Date.fromisoformat(as_of)
-    elif isinstance(timezone, str):
-        as_of_day = datetime.now(ZoneInfo(timezone)).date()
-    else:
-        as_of_day = datetime.now(
-            fixed_timezone(timedelta(hours=offset))
-        ).date()
+    as_of_day = _as_of_date(as_of, timezone, offset, as_of_timezone)
     if as_of_day < day:
         raise ValueError("as_of must not be before the birth date")
     as_of_jd = utils.julian_day_number(
@@ -1154,6 +1184,10 @@ def yogini_dashas(
         },
         "mahadashas": mahadashas,
         "running": running,
+        "note": (
+            "The timeline starts with the balance of the pre-birth period, "
+            "which can begin before the birth date."
+        ),
     }
 
 
@@ -1166,12 +1200,14 @@ def strength_report(
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
 ) -> dict[str, Any]:
-    """Return Shadbala, bhava bala and Ashtakavarga bindus."""
+    """Return Shadbala and Ashtakavarga bindus."""
     day = Date.fromisoformat(date)
     birth = _birth_datetime(date, time)
     _check_coordinates(latitude, longitude)
 
-    offset = _offset_hours(timezone, day)
+    offset = _offset_hours(
+        timezone, day, birth.hour + birth.minute / 60
+    )
     place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
@@ -1180,7 +1216,6 @@ def strength_report(
 
     with _use_ayanamsa(ayanamsa) as ayanamsa_label:
         shad = strength.shad_bala(jd, place)
-        bhava = strength.bhava_bala(jd, place)
         lagna = drik.ascendant(jd, place)
         positions = drik.planetary_positions(jd, place)
         chart = [""] * 12
@@ -1213,11 +1248,6 @@ def strength_report(
             "total": dict(zip(planets, shad[6])),
             "rupas": dict(zip(planets, shad[7])),
             "strength": dict(zip(planets, shad[8])),
-        },
-        "bhava_bala": {
-            "total": bhava[0],
-            "rupas": bhava[1],
-            "strength": bhava[2],
         },
         "ashtakavarga": {
             "sarva": dict(zip(RAASI_NAMES, sav)),

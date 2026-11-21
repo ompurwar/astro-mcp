@@ -185,12 +185,30 @@ def test_dasha_depth_includes_pratyantar():
 def test_refraction_sunrise_is_earlier():
     hindu = panchang("2026-11-20")
     refraction = panchang("2026-11-20", sunrise_convention="refraction")
+    bottom_limb = panchang("2026-11-20", sunrise_convention="bottom_limb")
+    muhurta_refraction = muhurta(
+        "2026-11-20", sunrise_convention="refraction"
+    )
 
     assert hindu["sunrise"].startswith("2026-11-20T06:22")
     assert refraction["sunrise"].startswith("2026-11-20T06:19")
+    assert bottom_limb["sunrise"].startswith("2026-11-20T06:20")
     assert refraction["system"]["sunrise_convention"] == (
         "Center of disc with refraction"
     )
+    assert bottom_limb["system"]["sunrise_convention"] == (
+        "Bottom limb with refraction"
+    )
+    assert muhurta_refraction["sunrise"] == refraction["sunrise"]
+    assert muhurta_refraction["brahma"]["start"].startswith(
+        "2026-11-20T04:3"
+    )
+
+
+def test_dst_birth_uses_the_local_offset():
+    result = kundli("2026-03-08", "01:30", timezone="America/New_York")
+
+    assert result["datetime"] == "2026-03-08T01:30:00-05:00"
 
 
 def test_transits_sade_sati_status():
@@ -246,6 +264,20 @@ def test_matching_ashtakoota():
     assert result["verdict"] == "below traditional minimum"
 
 
+def test_matching_accepts_utc_girl_timezone():
+    result = matching(
+        "1995-05-12",
+        "07:00",
+        "1990-01-01",
+        "12:00",
+        girl_timezone=0.0,
+    )
+
+    assert result["girl"]["datetime"] == "1990-01-01T12:00:00+00:00"
+    assert result["girl"]["nakshatra"] == "Shatabhisha"
+    assert result["total"] == 8.5
+
+
 def test_yogini_dashas_running_chain():
     result = yogini_dashas(
         "1995-05-12",
@@ -282,7 +314,6 @@ def test_strength_report():
     assert result["shadbala"]["total"]["Saturn"] == 598.51
     assert result["shadbala"]["strength"]["Saturn"] == 2.0
     assert result["ashtakavarga"]["sarva"]["Aquarius"] == 38
-    assert len(result["bhava_bala"]["total"]) == 12
     assert len(result["ashtakavarga"]["bhinnashtakavarga"]) == 8
 
 
