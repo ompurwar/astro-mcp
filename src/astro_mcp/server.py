@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from typing import Annotated, Any
 
 from mcp.server import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
 from .engine import (
@@ -191,7 +193,21 @@ def get_muhurta(
 
 
 def main() -> None:
-    server.run("stdio")
+    port = os.environ.get("PORT")
+    if port:
+        server.run(
+            "streamable-http",
+            host="0.0.0.0",
+            port=int(port),
+            streamable_http_path="/mcp",
+            stateless_http=True,
+            json_response=True,
+            transport_security=TransportSecuritySettings(
+                enable_dns_rebinding_protection=False
+            ),
+        )
+    else:
+        server.run("stdio")
 
 
 if __name__ == "__main__":

@@ -46,6 +46,15 @@ The server speaks MCP over stdio:
 .venv/bin/astro-mcp
 ```
 
+Set `PORT` to serve streamable HTTP instead:
+
+```sh
+PORT=8080 .venv/bin/astro-mcp
+```
+
+The MCP endpoint is `http://localhost:8080/mcp`. The included `Dockerfile` is
+set up for Cloud Run, which provides `PORT` automatically.
+
 ## Configure
 
 Point any MCP client at the installed executable:
