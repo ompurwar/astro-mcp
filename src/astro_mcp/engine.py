@@ -40,12 +40,18 @@ AYANAMSA_MODES = {
     "YUKTESHWAR": "Yukteshwar",
     "FAGAN": "Fagan/Bradley",
     "USHASHASHI": "Ushashashi",
-    "SURYA_SIDDHANTA": "Surya Siddhanta",
-    "SURYA_SIDDHANTA_MSUN": "Surya Siddhanta (Mean Sun)",
+    "SURYASIDDHANTA": "Surya Siddhanta",
+    "SURYASIDDHANTA_MSUN": "Surya Siddhanta (Mean Sun)",
     "ARYABHATA": "Aryabhata",
     "ARYABHATA_MSUN": "Aryabhata (Mean Sun)",
     "SS_CITRA": "Surya Siddhanta Chitra",
     "SS_REVATI": "Surya Siddhanta Revati",
+}
+
+# PyJHora keys omit the underscore in SURYA_SIDDHANTA; accept both spellings.
+AYANAMSA_ALIASES = {
+    "SURYA_SIDDHANTA": "SURYASIDDHANTA",
+    "SURYA_SIDDHANTA_MSUN": "SURYASIDDHANTA_MSUN",
 }
 
 VARGA_NAMES = {
@@ -111,7 +117,8 @@ _AYANAMSA_LOCK = threading.RLock()
 
 @contextmanager
 def _use_ayanamsa(mode: str):
-    key = mode.strip().upper()
+    raw = mode.strip().upper()
+    key = AYANAMSA_ALIASES.get(raw, raw)
     if key not in AYANAMSA_MODES:
         raise ValueError(
             f"Unknown ayanamsa: {mode}. Supported: {', '.join(AYANAMSA_MODES)}"

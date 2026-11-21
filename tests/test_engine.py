@@ -278,6 +278,22 @@ def test_matching_accepts_utc_girl_timezone():
     assert result["total"] == 8.5
 
 
+def test_surya_siddhanta_is_applied_to_matching():
+    lahiri = matching("1995-05-12", "07:00", "1990-01-01", "12:00")
+    surya = matching(
+        "1995-05-12",
+        "07:00",
+        "1990-01-01",
+        "12:00",
+        ayanamsa="SURYA_SIDDHANTA",
+    )
+
+    assert surya["system"]["ayanamsa"] == "Surya Siddhanta"
+    assert surya["boy"]["degree"] != lahiri["boy"]["degree"]
+    assert surya["girl"]["nakshatra"] == "Shatabhisha"
+    assert surya["total"] == 8.5
+
+
 def test_yogini_dashas_running_chain():
     result = yogini_dashas(
         "1995-05-12",
