@@ -143,7 +143,8 @@ FESTIVAL_CALENDARS = {
 
 YOGA_DESCRIPTIONS = {
     "chatussagara_yoga": (
-        "All four Kendra houses (1, 4, 7, 10) are occupied by planets."
+        "All four Kendra houses (1, 4, 7, 10) are occupied by at least "
+        "one planet."
     ),
 }
 
@@ -384,6 +385,243 @@ def _vasiya_score(
         RAASI_NAMES.index(girl["sign"]), girl["degree"], method
     )
     return VASIYA_TABLE[girl_group][boy_group]
+
+
+def _house_lords(lagna_rasi: int) -> dict[int, int]:
+    return {
+        house_number: const.house_owners[
+            (lagna_rasi + house_number - 1) % 12
+        ]
+        for house_number in range(1, 13)
+    }
+
+
+def _raja_yoga_items(positions: list) -> list[dict[str, Any]]:
+    lagna_rasi = positions[0][1][0]
+    planet_rasi = {
+        planet_id: rasi
+        for planet_id, (rasi, _) in positions
+        if isinstance(planet_id, int)
+    }
+    planet_house = {
+        planet_id: (rasi - lagna_rasi) % 12 + 1
+        for planet_id, rasi in planet_rasi.items()
+    }
+    lords = _house_lords(lagna_rasi)
+    chart = utils.get_house_planet_list_from_planet_positions(positions)
+
+    pairs: dict[tuple[int, int], dict[str, Any]] = {}
+    for kendra in (1, 4, 7, 10):
+        for trikona in (1, 5, 9):
+            kendra_lord = lords[kendra]
+            trikona_lord = lords[trikona]
+            if kendra_lord == trikona_lord:
+                continue
+            pair = tuple(sorted((kendra_lord, trikona_lord)))
+            associations = set()
+            if planet_rasi[kendra_lord] == planet_rasi[trikona_lord]:
+                associations.add("conjunction")
+            if trikona_lord in house.aspected_planets_of_the_planet(
+                chart, kendra_lord
+            ) or kendra_lord in house.aspected_planets_of_the_planet(
+                chart, trikona_lord
+            ):
+                associations.add("aspect")
+            if (
+                const.house_owners[planet_rasi[kendra_lord]]
+                == trikona_lord
+                and const.house_owners[planet_rasi[trikona_lord]]
+                == kendra_lord
+            ):
+                associations.add("exchange")
+            if not associations:
+                continue
+            entry = pairs.setdefault(
+                pair,
+                {"associations": set(), "houses": set()},
+            )
+            entry["associations"].update(associations)
+            entry["houses"].add((kendra, trikona))
+
+    items = []
+    for (first, second), entry in pairs.items():
+        houses = sorted(entry["houses"])
+        house_text = ", ".join(
+            f"{kendra}/{trikona}" for kendra, trikona in houses
+        )
+        items.append(
+            {
+                "key": f"raja_yoga_{first}_{second}",
+                "chart": "D1",
+                "name": "Raja Yoga",
+                "description": (
+                    f"{PLANET_NAMES[first]} and {PLANET_NAMES[second]} are "
+                    f"associated by {', '.join(sorted(entry['associations']))} "
+                    f"as kendra/trikona lords ({house_text})."
+                ),
+                "effects": (
+                    "Kendra and trikona lord association; supports status, "
+                    "authority and good fortune."
+                ),
+                "category": "raja",
+                "planets": [PLANET_NAMES[first], PLANET_NAMES[second]],
+                "houses": [house for pair in houses for house in pair],
+            }
+        )
+    return items
+
+
+def _viparita_raja_yoga_items(
+    positions: list,
+) -> list[dict[str, Any]]:
+    lagna_rasi = positions[0][1][0]
+    planet_house = {
+        planet_id: (rasi - lagna_rasi) % 12 + 1
+        for planet_id, (rasi, _) in positions
+        if isinstance(planet_id, int)
+    }
+    lords = _house_lords(lagna_rasi)
+    items = []
+    for house_number, name in ((6, "Harsha"), (8, "Sarala"), (12, "Vimala")):
+        lord = lords[house_number]
+        placed_in = planet_house[lord]
+        if placed_in not in (6, 8, 12):
+            continue
+        items.append(
+            {
+                "key": f"{name.lower()}_yoga",
+                "chart": "D1",
+                "name": f"{name} Yoga",
+                "description": (
+                    f"Lord of house {house_number} ({PLANET_NAMES[lord]}) is "
+                    f"placed in house {placed_in}; this is a Viparita Raja Yoga."
+                ),
+                "effects": (
+                    "Viparita Raja Yoga: adversity of the 6th, 8th or 12th "
+                    "house turns into strength."
+                ),
+                "category": "raja",
+                "planets": [PLANET_NAMES[lord]],
+                "houses": [house_number, placed_in],
+            }
+        )
+    return items
+
+
+def _neechabhanga_yoga_items(positions: list) -> list[dict[str, Any]]:
+    lagna_rasi = positions[0][1][0]
+    planet_rasi = {
+        planet_id: rasi
+        for planet_id, (rasi, _) in positions
+        if isinstance(planet_id, int)
+    }
+    planet_house = {
+        planet_id: (rasi - lagna_rasi) % 12 + 1
+        for planet_id, rasi in planet_rasi.items()
+    }
+    chart = utils.get_house_planet_list_from_planet_positions(positions)
+    moon_house = planet_house[1]
+    items = []
+    for planet_id in range(7):
+        rasi = planet_rasi[planet_id]
+        if (
+            const.house_strengths_of_planets[planet_id][rasi]
+            != const._DEBILITATED_NEECHAM
+        ):
+            continue
+        dispositor = const.house_owners[rasi]
+        conditions = []
+        if planet_house[dispositor] in (1, 4, 7, 10):
+            conditions.append("dispositor is in a kendra from lagna")
+        if (planet_house[dispositor] - moon_house) % 12 + 1 in (1, 4, 7, 10):
+            conditions.append("dispositor is in a kendra from the Moon")
+        if planet_id in house.aspected_planets_of_the_planet(
+            chart, dispositor
+        ):
+            conditions.append("dispositor aspects the debilitated planet")
+        for sign, strength in enumerate(
+            const.house_strengths_of_planets[planet_id]
+        ):
+            if strength != const._EXALTED_UCCHAM:
+                continue
+            exaltation_lord = const.house_owners[sign]
+            if planet_house[exaltation_lord] in (1, 4, 7, 10):
+                conditions.append(
+                    f"lord of the exaltation sign "
+                    f"({PLANET_NAMES[exaltation_lord]}) is in a kendra"
+                )
+        if conditions:
+            items.append(
+                {
+                    "key": f"neechabhanga_{PLANET_NAMES[planet_id].lower()}_yoga",
+                    "chart": "D1",
+                    "name": "Neechabhanga Raja Yoga",
+                    "description": (
+                        f"{PLANET_NAMES[planet_id]} is debilitated in "
+                        f"{RAASI_NAMES[rasi]}; "
+                        + ", ".join(conditions)
+                        + "."
+                    ),
+                    "effects": (
+                        "Debilitation is cancelled and can rise into a "
+                        "Raja Yoga."
+                    ),
+                    "category": "raja",
+                    "planets": [PLANET_NAMES[planet_id]],
+                    "houses": [planet_house[planet_id]],
+                }
+            )
+    return items
+
+
+PANCHA_MAHAPURUSHA_YOGAS = {
+    "sasa_yoga",
+    "ruchaka_yoga",
+    "bhadra_yoga",
+    "hamsa_yoga",
+    "malavya_yoga",
+}
+DHANA_YOGAS = {
+    "annadana_yoga",
+    "swaveeryaddhana_yoga",
+    "lakshmi_yoga",
+}
+CHANDRA_YOGAS = {
+    "vesi_yoga",
+    "sunaphaa_yoga",
+    "anaphaa_yoga",
+    "duradhara_yoga",
+}
+ARISHTA_PREFIXES = (
+    "dharidhra",
+    "rogagrastha",
+    "krisanga",
+    "matrunasa",
+    "rajabhrashta",
+    "vanchana",
+    "bandhubhisthyaktha",
+    "kapata_yoga",
+    "mathibhramana",
+    "bharyasahavyabhichara",
+    "dhur_yoga",
+    "anapathya",
+)
+
+
+def _yoga_category(key: str) -> str:
+    if key.startswith(
+        ("raja_yoga_", "harsha_yoga", "sarala_yoga", "vimala_yoga", "neechabhanga")
+    ) or key == "chatussagara_yoga":
+        return "raja"
+    if key in PANCHA_MAHAPURUSHA_YOGAS:
+        return "pancha_mahapurusha"
+    if key in DHANA_YOGAS or key.startswith("dhana_yoga"):
+        return "dhana"
+    if key.startswith(ARISHTA_PREFIXES):
+        return "arishta"
+    if key in CHANDRA_YOGAS:
+        return "chandra"
+    return "other"
 
 
 def _manglik_status(
@@ -1460,10 +1698,11 @@ def yogas(
         _use_node_type(node_type) as node_label,
     ):
         with redirect_stdout(io.StringIO()):
-            yoga_results, count, total = yoga.get_yoga_details(
+            yoga_results, _, total = yoga.get_yoga_details(
                 jd, place, divisional_chart_factor=division
             )
             dosha_results = dosha.get_dosha_details(jd, place)
+        positions = charts.rasi_chart(jd, place)
 
     yoga_list = [
         {
@@ -1475,6 +1714,14 @@ def yogas(
         }
         for key, details in yoga_results.items()
     ]
+    yoga_list.extend(_raja_yoga_items(positions))
+    yoga_list.extend(_viparita_raja_yoga_items(positions))
+    yoga_list.extend(_neechabhanga_yoga_items(positions))
+    for item in yoga_list:
+        item["category"] = _yoga_category(item["key"])
+    categories: dict[str, int] = {}
+    for item in yoga_list:
+        categories[item["category"]] = categories.get(item["category"], 0) + 1
     dosha_list = {
         key: _clean_html(value) for key, value in dosha_results.items()
     }
@@ -1517,8 +1764,14 @@ def yogas(
             "ayanamsa": ayanamsa_label,
             "division": division,
             "varga": VARGA_NAMES[division],
-            "yogas_found": count,
+            "yogas_found": len(yoga_list),
             "yoga_rules_checked": total,
+            "categories": categories,
+            "custom_rules": [
+                "raja_yoga",
+                "viparita_raja_yoga",
+                "neechabhanga_raja_yoga",
+            ],
             "node_type": node_label,
         },
         "yogas": yoga_list,

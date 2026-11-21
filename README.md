@@ -15,7 +15,7 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 | `get_dashas` | Vimshottari timeline, balance at birth, and the running chain down to pratyantar, sookshma, prana or deha. |
 | `get_yogini_dashas` | Yogini dasha timeline and running chain, with Yogini names and ruling planets. |
 | `get_chara_dashas` | Chara (Jaimini rasi) dasha with KN Rao, PVN Rao or Irangatti methods. |
-| `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas, plus a list of opposing yoga pairs. |
+| `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas, plus category counts and opposing yoga pairs. |
 | `get_strength` | Shadbala, Sarvashtakavarga and Bhinnashtakavarga bindus. |
 | `get_matching` | North Indian Ashtakoota (36 points) or South Indian Porutham (10 checks), plus Manglik status and a D9 comparison. Vasiya can use the classical or whole-sign convention. |
 | `get_muhurta` | Abhijit and Brahma muhurta, Rahu kaalam, Yamagandam, Gulika and Durmuhurtam. |

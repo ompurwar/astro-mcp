@@ -246,6 +246,46 @@ def test_yogas_and_doshas_are_detected():
     assert "no Kala Sarpa" in result["doshas"]["Kala Sarpa Dosha"]
 
 
+def test_yogas_include_raja_yoga_categories():
+    from astro_mcp.engine import _neechabhanga_yoga_items
+
+    result = yogas(
+        "1995-05-12",
+        "07:00",
+        latitude=24.45,
+        longitude=82.98,
+        location_name="Obra",
+    )
+    raja = [item for item in result["yogas"] if item["category"] == "raja"]
+
+    assert any(item["key"].startswith("raja_yoga_") for item in raja)
+    assert any(item["key"] == "harsha_yoga" for item in raja)
+    assert result["system"]["categories"]["raja"] >= 2
+    chatussagara = next(
+        item for item in result["yogas"] if item["key"] == "chatussagara_yoga"
+    )
+    assert chatussagara["description"] == (
+        "All four Kendra houses (1, 4, 7, 10) are occupied by at least "
+        "one planet."
+    )
+
+    synthetic = [
+        ["L", (0, 0.0)],
+        [0, (6, 10.0)],
+        [1, (0, 0.0)],
+        [2, (0, 0.0)],
+        [3, (0, 0.0)],
+        [4, (0, 0.0)],
+        [5, (0, 0.0)],
+        [6, (0, 0.0)],
+        [7, (0, 0.0)],
+        [8, (0, 0.0)],
+    ]
+    items = _neechabhanga_yoga_items(synthetic)
+    assert any("Sun" in item["planets"] for item in items)
+    assert all(item["category"] == "raja" for item in items)
+
+
 def test_matching_ashtakoota():
     result = matching("1995-05-12", "07:00", "1990-01-01", "12:00")
 

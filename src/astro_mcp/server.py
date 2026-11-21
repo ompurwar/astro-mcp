@@ -91,7 +91,7 @@ FestivalCalendar = Annotated[
 
 server = MCPServer(
     "astro-mcp",
-    version="0.6.0",
+    version="0.7.0",
     instructions=(
         "Vedic astrology using Drik ganita and a selectable ayanamsa "
         "(Lahiri by default). Panchang, kundli, varga charts, bhava "
@@ -445,7 +445,8 @@ def get_yogas(
     """Return classical yogas and doshas detected in a chart.
 
     Includes Manglik, Kala Sarpa, Pitru, Guru Chandala and other doshas,
-    plus the matched yoga rules and their traditional effects.
+    plus Kendra-Trikona Raja Yogas, Viparita Raja Yogas, Neechabhanga,
+    category counts and opposing yoga pairs.
     """
     return yogas(
         date=date,
