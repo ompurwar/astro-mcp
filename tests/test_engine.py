@@ -11,9 +11,14 @@ from astro_mcp.engine import (
     bhava_chalit,
     dashas,
     kundli,
+    matching,
     muhurta,
     panchang,
+    strength_report,
+    transits,
     varga,
+    yogas,
+    yogini_dashas,
 )
 
 
@@ -175,6 +180,119 @@ def test_dasha_depth_includes_pratyantar():
     ]
     assert result["running"][2]["start"].startswith("2026-07-15")
     assert result["running"][2]["end"].startswith("2026-11-24")
+
+
+def test_refraction_sunrise_is_earlier():
+    hindu = panchang("2026-11-20")
+    refraction = panchang("2026-11-20", sunrise_convention="refraction")
+
+    assert hindu["sunrise"].startswith("2026-11-20T06:22")
+    assert refraction["sunrise"].startswith("2026-11-20T06:19")
+    assert refraction["system"]["sunrise_convention"] == (
+        "Center of disc with refraction"
+    )
+
+
+def test_transits_sade_sati_status():
+    result = transits(
+        "1995-05-12",
+        "07:00",
+        as_of="2026-11-21",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+    )
+
+    assert result["natal"]["moon"]["nakshatra"] == "Hasta"
+    assert result["sade_sati"]["active"] is False
+    assert result["sade_sati"]["saturn_house_from_moon"] == 7
+    saturn = next(p for p in result["planets"] if p["name"] == "Saturn")
+    assert saturn["sign"] == "Pisces"
+    assert saturn["house_from_lagna"] == 11
+
+
+def test_yogas_and_doshas_are_detected():
+    result = yogas(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+    )
+
+    names = {yoga["name"] for yoga in result["yogas"]}
+    assert "Sasa Yoga" in names
+    assert "Kala Sarpa Dosha" in result["doshas"]
+    assert "no Kala Sarpa" in result["doshas"]["Kala Sarpa Dosha"]
+
+
+def test_matching_ashtakoota():
+    result = matching("1995-05-12", "07:00", "1990-01-01", "12:00")
+
+    assert result["boy"]["nakshatra"] == "Hasta"
+    assert result["girl"]["nakshatra"] == "Dhanishta"
+    assert set(result["scores"]) == {
+        "varna",
+        "vasiya",
+        "gana",
+        "tara",
+        "yoni",
+        "graha_maitri",
+        "bhakoot",
+        "nadi",
+    }
+    assert result["total"] == 16.0
+    assert result["max"] == 36
+    assert result["verdict"] == "below traditional minimum"
+
+
+def test_yogini_dashas_running_chain():
+    result = yogini_dashas(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+        as_of="2026-11-21",
+        depth=3,
+    )
+
+    assert len(result["mahadashas"]) == 24
+    assert [period["level"] for period in result["running"]] == [
+        "Mahadasha",
+        "Antardasha",
+        "Pratyantardasha",
+    ]
+    assert [period["yogini"] for period in result["running"]] == [
+        "Sankata",
+        "Sankata",
+        "Dhanya",
+    ]
+
+
+def test_strength_report():
+    result = strength_report(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+    )
+
+    assert result["shadbala"]["total"]["Saturn"] == 598.51
+    assert result["shadbala"]["strength"]["Saturn"] == 2.0
+    assert result["ashtakavarga"]["sarva"]["Aquarius"] == 38
+    assert len(result["bhava_bala"]["total"]) == 12
+    assert len(result["ashtakavarga"]["bhinnashtakavarga"]) == 8
+
+
+def test_combust_planets_are_marked():
+    result = kundli("1990-01-01", "12:00")
+    planets = {planet["name"]: planet for planet in result["planets"]}
+
+    assert planets["Saturn"]["combust"] is True
+    assert planets["Sun"]["combust"] is False
+    assert planets["Moon"]["combust"] is False
 
 
 def test_import_keeps_stdout_clean():

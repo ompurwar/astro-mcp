@@ -11,7 +11,12 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 | `get_kundli` | D1 birth chart: lagna and planets with sign, degree, nakshatra, pada, whole-sign house and retrograde state. |
 | `get_varga` | Divisional chart: Navamsa D9, Dasamsa D10, Saptamsa D7, and the other standard vargas. |
 | `get_bhava_chalit` | Degree-based house cusps (Sripati, KP/Placidus or equal) and each planet's bhava. |
+| `get_transits` | Current transits with houses from the natal lagna and Moon, plus Sade Sati status. |
 | `get_dashas` | Vimshottari timeline, balance at birth, and the running chain down to pratyantar, sookshma, prana or deha. |
+| `get_yogini_dashas` | Yogini dasha timeline and running chain, with Yogini names and ruling planets. |
+| `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas. |
+| `get_strength` | Shadbala, bhava bala, Sarvashtakavarga and Bhinnashtakavarga bindus. |
+| `get_matching` | North Indian Ashtakoota guna milan for two birth charts, scored out of 36. |
 | `get_muhurta` | Abhijit and Brahma muhurta, Rahu kaalam, Yamagandam, Gulika and Durmuhurtam. |
 
 ## Defaults
@@ -20,15 +25,19 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 - Ayanamsa: Lahiri / Chitrapaksha, selectable per request (`RAMAN`, `KP`,
   `TRUE_CHITRA`, `TRUE_PUSHYA`, `YUKTESHWAR`, `FAGAN`, `SURYA_SIDDHANTA`, ...)
 - Panchang: Drik ganita, sunrise-based day
-- Sunrise: Hindu rising convention (disc center, no refraction)
+- Sunrise: Hindu rising by default; optionally refraction or bottom limb
 - Houses: whole sign for D1; Sripati, KP/Placidus or equal for bhava chalit
-- Dasha: Vimshottari, running chain to any depth from maha to deha
+- Dasha: Vimshottari and Yogini, running chain to any depth from maha to deha
+- Strength: Shadbala, bhava bala and Ashtakavarga
+- Matching: North Indian Ashtakoota, 36 points
 - Months and festivals (when added): purnimanta
 
-Every tool accepts `latitude`, `longitude`, `timezone` (an IANA name or a fixed
-UTC offset in hours) and `location_name` to override the defaults. The chart
-tools (`get_panchang`, `get_kundli`, `get_varga`, `get_bhava_chalit` and
-`get_dashas`) also accept `ayanamsa`.
+Place-based tools accept `latitude`, `longitude`, `timezone` (an IANA name or a
+fixed UTC offset in hours) and `location_name` to override the defaults. The
+chart tools (`get_panchang`, `get_kundli`, `get_varga`, `get_bhava_chalit`,
+`get_dashas`, `get_yogini_dashas`, `get_transits`, `get_yogas` and
+`get_strength`) also accept `ayanamsa`. `get_matching` takes two birth times
+and a timezone; coordinates are not needed for Moon-based guna milan.
 
 ## Install
 
@@ -119,10 +128,37 @@ Point any MCP client at the installed executable:
 {"date": "1990-01-01", "time": "12:00", "house_system": "kp"}
 ```
 
+`get_transits` (defaults `as_of` to today; Sade Sati is included):
+
+```json
+{"date": "1995-05-12", "time": "07:00", "as_of": "2026-11-21"}
+```
+
 `get_dashas` (defaults `as_of` to today; `depth` 3 adds pratyantar):
 
 ```json
 {"date": "1990-01-01", "time": "12:00", "as_of": "2026-11-20", "depth": 3}
+```
+
+`get_yogas`:
+
+```json
+{"date": "1995-05-12", "time": "07:00"}
+```
+
+`get_strength`:
+
+```json
+{"date": "1995-05-12", "time": "07:00"}
+```
+
+`get_matching` (boy and girl birth details):
+
+```json
+{
+  "boy_date": "1995-05-12", "boy_time": "07:00",
+  "girl_date": "1990-01-01", "girl_time": "12:00"
+}
 ```
 
 `get_muhurta`:
