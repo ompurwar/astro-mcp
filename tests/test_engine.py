@@ -9,7 +9,9 @@ import pytest
 from astro_mcp.engine import (
     PLANET_NAMES,
     bhava_chalit,
+    chara_dashas,
     dashas,
+    festivals,
     kundli,
     matching,
     muhurta,
@@ -262,6 +264,43 @@ def test_matching_ashtakoota():
     assert result["total"] == 16.0
     assert result["max"] == 36
     assert result["verdict"] == "below traditional minimum"
+    assert result["manglik"]["boy"]["effective"] is False
+    assert result["manglik"]["girl"]["effective"] is False
+
+
+def test_matching_navamsa_comparison():
+    result = matching(
+        "1995-05-12",
+        "07:00",
+        "1990-01-01",
+        "12:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+    )
+
+    assert result["navamsa"]["boy"]["lagna"] == "Cancer"
+    assert result["navamsa"]["girl"]["lagna"] == "Capricorn"
+    assert result["navamsa"]["lagna_house_from_boy"] == 7
+    assert result["navamsa"]["moon_house_from_boy"] == 6
+    assert result["navamsa"]["lagna_lord_friendship"] == "neutral"
+
+
+def test_matching_south_indian_porutham():
+    result = matching(
+        "1995-05-12",
+        "07:00",
+        "1990-01-01",
+        "12:00",
+        system="south",
+    )
+
+    assert result["system"]["method"] == "South Indian Porutham"
+    assert result["total"] == 7
+    assert result["max"] == 10
+    assert result["extras"]["minimum_porutham"] is False
+    assert result["verdict"] == "below traditional minimum"
+    assert len(result["scores"]) == 10
 
 
 def test_matching_accepts_utc_girl_timezone():
@@ -318,6 +357,39 @@ def test_yogini_dashas_running_chain():
     ]
 
 
+def test_chara_dashas_kn_rao():
+    result = chara_dashas(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+        as_of="2026-11-21",
+        depth=3,
+    )
+
+    assert result["system"]["method"] == "KN Rao"
+    assert len(result["mahadashas"]) == 12
+    assert result["mahadashas"][0]["sign"] == "Taurus"
+    assert result["mahadashas"][0]["lord"] == "Venus"
+    assert [period["sign"] for period in result["running"]] == [
+        "Capricorn",
+        "Pisces",
+        "Cancer",
+    ]
+
+
+def test_festivals_include_purnimanta_context():
+    result = festivals("2026-11-08")
+    by_name = {item["name"]: item for item in result["festivals"]}
+
+    assert result["system"]["months"] == "purnimanta"
+    assert "Diwali (Deepavali)" in by_name
+    assert by_name["Diwali (Deepavali)"]["month"] == "Karttika"
+    assert by_name["Diwali (Deepavali)"]["tithi"] == "Amavasya"
+    assert by_name["Diwali (Deepavali)"]["paksha"] == "Krishna"
+
+
 def test_strength_report():
     result = strength_report(
         "1995-05-12",
@@ -340,6 +412,31 @@ def test_combust_planets_are_marked():
     assert planets["Saturn"]["combust"] is True
     assert planets["Sun"]["combust"] is False
     assert planets["Moon"]["combust"] is False
+
+
+def test_d9_aspects_and_friendship():
+    result = varga(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+        division=9,
+    )
+    planets = {planet["name"]: planet for planet in result["planets"]}
+
+    assert planets["Saturn"]["aspects"] == ["Sun", "Jupiter"]
+    assert planets["Sun"]["aspects"] == ["Moon", "Mercury", "Saturn"]
+    assert planets["Sun"]["friendship"]["friends"] == [
+        "Moon",
+        "Mars",
+        "Jupiter",
+    ]
+    assert set(planets["Sun"]["friendship"]) == {
+        "friends",
+        "neutral",
+        "enemies",
+    }
 
 
 def test_import_keeps_stdout_clean():

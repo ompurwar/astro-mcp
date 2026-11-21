@@ -17,9 +17,18 @@ from jhora.panchanga import drik
 
 # PyJHora prints its sys.path edits on import; silence them so stdio stays clean.
 with redirect_stdout(io.StringIO()):
-    from jhora.horoscope.chart import ashtakavarga, dosha, strength, yoga
+    from jhora.horoscope.chart import (
+        ashtakavarga,
+        charts,
+        dosha,
+        house,
+        strength,
+        yoga,
+    )
     from jhora.horoscope.dhasa.graha import vimsottari, yogini
+    from jhora.horoscope.dhasa.raasi import chara
     from jhora.horoscope.match.compatibility import Ashtakoota
+    from jhora.panchanga import vratha
 
 # Lahiri/Chitrapaksha is the standard for Indian calendars and the Kashi panchang.
 drik.set_ayanamsa_mode("LAHIRI")
@@ -104,6 +113,26 @@ COMBUSTION_ORBS = {
     4: 11.0,  # Jupiter
     5: 10.0,  # Venus
     6: 15.0,  # Saturn
+}
+
+CHARA_METHODS = {
+    "pvn_rao": (const.CHARA_TYPE.PVN_RAO, "Parasara / PVN Rao"),
+    "kn_rao": (const.CHARA_TYPE.KN_RAO, "KN Rao"),
+    "irangatti_male": (
+        const.CHARA_TYPE.IRANGATTI_MALE2,
+        "Irangatti (male)",
+    ),
+    "irangatti_female": (
+        const.CHARA_TYPE.IRANGATTI_FEMALE,
+        "Irangatti (female)",
+    ),
+}
+
+FESTIVAL_CALENDARS = {
+    "solar": const.CALENDAR_TYPE.SOLAR,
+    "amanta": const.CALENDAR_TYPE.LUNAR_AMANTHA,
+    "purnimanta": const.CALENDAR_TYPE.LUNAR_PURNIMANTHA,
+    "gregorian": const.CALENDAR_TYPE.GREGORIAN,
 }
 
 SUNRISE_CONVENTIONS = {
@@ -238,6 +267,84 @@ def _clean_html(value: str) -> str:
     text = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
     return html.unescape(text).strip()
+
+
+def _friendship(planet_id: int) -> dict[str, list[str]]:
+    labels = {3: "friends", 2: "neutral", 1: "enemies"}
+    groups: dict[str, list[str]] = {
+        "friends": [],
+        "neutral": [],
+        "enemies": [],
+    }
+    for other, relation in enumerate(const.planet_relations[planet_id]):
+        if other == planet_id:
+            continue
+        groups[labels[relation]].append(PLANET_NAMES[other])
+    return groups
+
+
+def _manglik_status(
+    date: str,
+    time: str,
+    timezone: str | float,
+    latitude: float,
+    longitude: float,
+    location_name: str,
+    ayanamsa: str,
+) -> dict[str, Any]:
+    day = Date.fromisoformat(date)
+    birth = _birth_datetime(date, time)
+    offset = _offset_hours(timezone, day, birth.hour + birth.minute / 60)
+    place = drik.Place(location_name, latitude, longitude, offset)
+    jd = utils.julian_day_number(
+        (birth.year, birth.month, birth.day),
+        (birth.hour, birth.minute, birth.second),
+    )
+    with _use_ayanamsa(ayanamsa):
+        positions = charts.rasi_chart(jd, place)
+        manglik, exceptions, indices = dosha.manglik(positions)
+    return {
+        "is_manglik": manglik,
+        "cancelled_by_exceptions": bool(manglik and exceptions),
+        "effective": bool(manglik and not exceptions),
+        "exception_indices": indices,
+        "reference": "lagna",
+    }
+
+
+def _navamsa_summary(
+    date: str,
+    time: str,
+    timezone: str | float,
+    latitude: float,
+    longitude: float,
+    location_name: str,
+    ayanamsa: str,
+) -> dict[str, Any]:
+    day = Date.fromisoformat(date)
+    birth = _birth_datetime(date, time)
+    offset = _offset_hours(timezone, day, birth.hour + birth.minute / 60)
+    place = drik.Place(location_name, latitude, longitude, offset)
+    jd = utils.julian_day_number(
+        (birth.year, birth.month, birth.day),
+        (birth.hour, birth.minute, birth.second),
+    )
+    with _use_ayanamsa(ayanamsa):
+        lagna_rasi, lagna_degree, _, _ = drik.ascendant(jd, place)
+        d9_lagna, _ = drik.dasavarga_from_long(
+            lagna_rasi * 30 + lagna_degree, 9
+        )
+        positions = drik.dhasavarga(
+            jd, place, divisional_chart_factor=9
+        )
+    moon_rasi = next(rasi for pid, (rasi, _) in positions if pid == 1)
+    venus_rasi = next(rasi for pid, (rasi, _) in positions if pid == 5)
+    return {
+        "lagna": RAASI_NAMES[d9_lagna],
+        "lagna_lord": PLANET_NAMES[const.house_owners[d9_lagna]],
+        "moon": RAASI_NAMES[moon_rasi],
+        "venus": RAASI_NAMES[venus_rasi],
+    }
 
 
 def _is_combust(
@@ -521,6 +628,19 @@ def varga(
         for planet_id, (rasi, degree) in d1_positions
     }
     sun_full = d1_longitudes[0]
+    varga_chart = utils.get_house_planet_list_from_planet_positions(
+        [["L", (varga_lagna_rasi, 0.0)]]
+        + [[planet_id, (rasi, 0.0)] for planet_id, (rasi, _) in positions]
+    )
+    aspects = {
+        planet_id: [
+            PLANET_NAMES[other]
+            for other in sorted(
+                set(house.aspected_planets_of_the_planet(varga_chart, planet_id))
+            )
+        ]
+        for planet_id, _ in positions
+    }
     planets = [
         {
             "name": PLANET_NAMES[planet_id],
@@ -533,6 +653,8 @@ def varga(
                 sun_full,
                 planet_id in retrograde,
             ),
+            "aspects": aspects[planet_id],
+            "friendship": _friendship(planet_id),
         }
         for planet_id, (rasi, _) in positions
     ]
@@ -855,36 +977,168 @@ def matching(
     timezone: str | float = DEFAULT_TIMEZONE,
     girl_timezone: str | float | None = None,
     ayanamsa: str = "LAHIRI",
+    system: str = "north",
+    latitude: float = DEFAULT_LATITUDE,
+    longitude: float = DEFAULT_LONGITUDE,
+    location_name: str = DEFAULT_LOCATION,
+    girl_latitude: float | None = None,
+    girl_longitude: float | None = None,
 ) -> dict[str, Any]:
-    """Return North Indian Ashtakoota guna milan for two birth times."""
+    """Return North or South Indian guna milan for two birth charts."""
+    key = system.strip().lower()
+    if key not in ("north", "south"):
+        raise ValueError("system must be north or south")
+    _check_coordinates(latitude, longitude)
+    girl_lat = latitude if girl_latitude is None else girl_latitude
+    girl_lon = longitude if girl_longitude is None else girl_longitude
+    _check_coordinates(girl_lat, girl_lon)
+
+    girl_tz = girl_timezone if girl_timezone is not None else timezone
     boy = _moon_details(boy_date, boy_time, timezone, ayanamsa)
-    girl = _moon_details(
-        girl_date,
-        girl_time,
-        girl_timezone if girl_timezone is not None else timezone,
-        ayanamsa,
-    )
+    girl = _moon_details(girl_date, girl_time, girl_tz, ayanamsa)
 
     ashtakoota = Ashtakoota(
         boy["number"],
         boy["pada"],
         girl["number"],
         girl["pada"],
-        method=const.CHART_STYLE.NORTH_INDIAN,
+        method=(
+            const.CHART_STYLE.SOUTH_INDIAN_REGULAR
+            if key == "south"
+            else const.CHART_STYLE.NORTH_INDIAN
+        ),
     )
     values = ashtakoota.compatibility_score()
-    labels = (
-        "varna",
-        "vasiya",
-        "gana",
-        "tara",
-        "yoni",
-        "graha_maitri",
-        "bhakoot",
-        "nadi",
+
+    if key == "south":
+        scores = {
+            "dina": values[3],
+            "gana": values[2],
+            "mahendra": values[9],
+            "sthree_dheerga": values[12],
+            "yoni": values[4],
+            "raasi": values[6],
+            "raasi_adhipathi": values[5],
+            "vasiya": values[1],
+            "rajju": values[11],
+            "vedha": values[10],
+        }
+        total = values[8]
+        maximum = 10
+        minimum_porutham = bool(values[13])
+        verdict = (
+            "recommended"
+            if total >= const.compatibility_minimum_score_south
+            and minimum_porutham
+            else "below traditional minimum"
+        )
+        extras = {"minimum_porutham": minimum_porutham}
+        method_label = "South Indian Porutham"
+        note = (
+            "South Indian matching scores 10 poruthams; 6/10 and the "
+            "minimum poruthams are the traditional minimum."
+        )
+    else:
+        labels = (
+            "varna",
+            "vasiya",
+            "gana",
+            "tara",
+            "yoni",
+            "graha_maitri",
+            "bhakoot",
+            "nadi",
+        )
+        scores = dict(zip(labels, values[:8]))
+        total = values[8]
+        maximum = 36
+        verdict = (
+            "recommended" if total >= 18 else "below traditional minimum"
+        )
+        extras = {
+            "mahendra": values[9],
+            "vedha": values[10],
+            "rajju": values[11],
+            "shree_dheerga": values[12],
+        }
+        method_label = "North Indian Ashtakoota"
+        note = (
+            "18/36 is the traditional minimum; this is not a substitute "
+            "for a full chart comparison."
+        )
+
+    manglik = {
+        "boy": _manglik_status(
+            boy_date,
+            boy_time,
+            timezone,
+            latitude,
+            longitude,
+            location_name,
+            ayanamsa,
+        ),
+        "girl": _manglik_status(
+            girl_date,
+            girl_time,
+            girl_tz,
+            girl_lat,
+            girl_lon,
+            location_name,
+            ayanamsa,
+        ),
+        "note": (
+            "Mars from the lagna with BV Raman exceptions applied; the "
+            "2nd house is included."
+        ),
+    }
+
+    boy_navamsa = _navamsa_summary(
+        boy_date,
+        boy_time,
+        timezone,
+        latitude,
+        longitude,
+        location_name,
+        ayanamsa,
     )
-    scores = dict(zip(labels, values[:8]))
-    total = values[8]
+    girl_navamsa = _navamsa_summary(
+        girl_date,
+        girl_time,
+        girl_tz,
+        girl_lat,
+        girl_lon,
+        location_name,
+        ayanamsa,
+    )
+    boy_lord = PLANET_NAMES.index(boy_navamsa["lagna_lord"])
+    girl_lord = PLANET_NAMES.index(girl_navamsa["lagna_lord"])
+    relation = const.planet_relations[boy_lord][girl_lord]
+    navamsa = {
+        "boy": boy_navamsa,
+        "girl": girl_navamsa,
+        "lagna_house_from_boy": (
+            RAASI_NAMES.index(girl_navamsa["lagna"])
+            - RAASI_NAMES.index(boy_navamsa["lagna"])
+        )
+        % 12
+        + 1,
+        "moon_house_from_boy": (
+            RAASI_NAMES.index(girl_navamsa["moon"])
+            - RAASI_NAMES.index(boy_navamsa["moon"])
+        )
+        % 12
+        + 1,
+        "lagna_lord_friendship": {
+            5: "same",
+            3: "friend",
+            2: "neutral",
+            1: "enemy",
+        }[relation],
+        "note": (
+            "Informational D9 comparison, not part of the kuta score. "
+            "6/8 and 2/12 lagna or Moon placements are traditionally avoided."
+        ),
+    }
 
     return {
         "boy": {
@@ -897,24 +1151,16 @@ def matching(
         },
         "scores": scores,
         "total": total,
-        "max": 36,
-        "verdict": (
-            "recommended" if total >= 18 else "below traditional minimum"
-        ),
-        "extras": {
-            "mahendra": values[9],
-            "vedha": values[10],
-            "rajju": values[11],
-            "shree_dheerga": values[12],
-        },
+        "max": maximum,
+        "verdict": verdict,
+        "extras": extras,
+        "manglik": manglik,
+        "navamsa": navamsa,
         "system": {
             "ayanamsa": boy["ayanamsa"],
-            "method": "North Indian Ashtakoota",
+            "method": method_label,
         },
-        "note": (
-            "18/36 is the traditional minimum; this is not a substitute "
-            "for a full chart comparison."
-        ),
+        "note": note,
     }
 
 
@@ -1194,6 +1440,193 @@ def yogini_dashas(
         "note": (
             "The timeline starts with the balance of the pre-birth period, "
             "which can begin before the birth date."
+        ),
+    }
+
+
+def chara_dashas(
+    date: str,
+    time: str,
+    latitude: float = DEFAULT_LATITUDE,
+    longitude: float = DEFAULT_LONGITUDE,
+    timezone: str | float = DEFAULT_TIMEZONE,
+    location_name: str = DEFAULT_LOCATION,
+    as_of: str | None = None,
+    as_of_timezone: str | float | None = None,
+    depth: int = 2,
+    method: str = "kn_rao",
+    ayanamsa: str = "LAHIRI",
+) -> dict[str, Any]:
+    """Return the Chara (Jaimini rasi) dasha timeline and running periods."""
+    day = Date.fromisoformat(date)
+    birth = _birth_datetime(date, time)
+    _check_coordinates(latitude, longitude)
+    key = method.strip().lower()
+    if key not in CHARA_METHODS:
+        raise ValueError(
+            f"Unknown method: {method}. Supported: {', '.join(CHARA_METHODS)}"
+        )
+    if not 1 <= depth <= len(DASHA_LEVELS):
+        raise ValueError(f"depth must be between 1 and {len(DASHA_LEVELS)}")
+
+    offset = _offset_hours(timezone, day, birth.hour + birth.minute / 60)
+    place = drik.Place(location_name, latitude, longitude, offset)
+    dob = (birth.year, birth.month, birth.day)
+    tob = (birth.hour, birth.minute, birth.second)
+    jd = utils.julian_day_number(dob, tob)
+    as_of_day = _as_of_date(as_of, timezone, offset, as_of_timezone)
+    if as_of_day < day:
+        raise ValueError("as_of must not be before the birth date")
+    as_of_jd = utils.julian_day_number(
+        (as_of_day.year, as_of_day.month, as_of_day.day), (12, 0, 0)
+    )
+    method_value, method_label = CHARA_METHODS[key]
+
+    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+        rows = chara.get_dhasa_antardhasa(
+            dob,
+            tob,
+            place,
+            dhasa_level_index=1,
+            chara_method=method_value,
+            return_exact_bounds=True,
+        )
+        mahadashas = [
+            {
+                "sign": RAASI_NAMES[sign],
+                "lord": PLANET_NAMES[const.house_owners[sign]],
+                "start": _tuple_iso(utils.jd_to_gregorian(start), offset),
+                "end": _tuple_iso(utils.jd_to_gregorian(end), offset),
+                "duration_years": years,
+            }
+            for (sign,), start, end, years in rows
+        ]
+        running = [
+            {
+                "level": DASHA_LEVELS[len(lords) - 1],
+                "sign": RAASI_NAMES[lords[-1]],
+                "lord": PLANET_NAMES[const.house_owners[lords[-1]]],
+                "start": _tuple_iso(start, offset),
+                "end": _tuple_iso(end, offset),
+            }
+            for lords, start, end in chara.get_running_dhasa_for_given_date(
+                as_of_jd,
+                jd,
+                place,
+                dhasa_level_index=depth,
+                chara_method=method_value,
+            )
+        ]
+
+    return {
+        "datetime": birth.replace(
+            tzinfo=fixed_timezone(timedelta(hours=offset))
+        ).isoformat(timespec="seconds"),
+        "as_of": as_of_day.isoformat(),
+        "location": _location(
+            location_name, latitude, longitude, timezone, offset
+        ),
+        "system": {
+            "dasha": "Chara",
+            "method": method_label,
+            "ayanamsa": ayanamsa_label,
+            "depth": depth,
+        },
+        "mahadashas": mahadashas,
+        "running": running,
+    }
+
+
+def festivals(
+    start_date: str,
+    end_date: str | None = None,
+    latitude: float = DEFAULT_LATITUDE,
+    longitude: float = DEFAULT_LONGITUDE,
+    timezone: str | float = DEFAULT_TIMEZONE,
+    location_name: str = DEFAULT_LOCATION,
+    calendar: str = "all",
+) -> dict[str, Any]:
+    """Return Hindu festivals in a date range with purnimanta month and tithi."""
+    start = Date.fromisoformat(start_date)
+    end = Date.fromisoformat(end_date) if end_date is not None else start
+    if end < start:
+        raise ValueError("end_date must not be before start_date")
+    if (end - start).days > 366:
+        raise ValueError("date range must be 366 days or less")
+    _check_coordinates(latitude, longitude)
+    key = calendar.strip().lower()
+    if key != "all" and key not in FESTIVAL_CALENDARS:
+        raise ValueError(
+            f"Unknown calendar: {calendar}. Supported: all, "
+            f"{', '.join(FESTIVAL_CALENDARS)}"
+        )
+
+    offset = _offset_hours(timezone, start)
+    place = drik.Place(location_name, latitude, longitude, offset)
+    rows_by_day = vratha.get_festivals_between_the_dates(
+        drik.Date(start.year, start.month, start.day),
+        drik.Date(end.year, end.month, end.day),
+        place,
+    )
+
+    last_seen: dict[str, Date] = {}
+    items = []
+    for date_tuple, rows in rows_by_day:
+        year, month, day = date_tuple[:3]
+        current = Date(year, month, day)
+        jd = utils.julian_day_number((year, month, day), (12, 0, 0))
+        lunar_month, _, _, adhika, _, _ = drik.vedic_date(
+            jd, place, calendar_type=const.CALENDAR_TYPE.LUNAR_PURNIMANTHA
+        )
+        tithi_number = drik.tithi(jd, place)[0]
+        for row in rows:
+            row_calendar = int(row["calendar_type"])
+            if key == "all":
+                if row_calendar == int(FESTIVAL_CALENDARS["gregorian"]):
+                    continue
+            elif row_calendar != int(FESTIVAL_CALENDARS[key]):
+                continue
+            name = row["Festival_en"]
+            seen = last_seen.get(name)
+            if seen is not None and (current - seen).days <= 2:
+                continue
+            last_seen[name] = current
+            items.append(
+                {
+                    "date": current.isoformat(),
+                    "name": name,
+                    "calendar": next(
+                        (
+                            label
+                            for label, value in FESTIVAL_CALENDARS.items()
+                            if int(value) == row_calendar
+                        ),
+                        str(row_calendar),
+                    ),
+                    "month": (
+                        ("Adhika " if adhika else "")
+                        + utils.MONTH_LIST[lunar_month - 1]
+                    ),
+                    "tithi": utils.TITHI_LIST[tithi_number - 1],
+                    "paksha": (
+                        "Shukla" if tithi_number <= 15 else "Krishna"
+                    ),
+                }
+            )
+
+    return {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "location": _location(
+            location_name, latitude, longitude, timezone, offset
+        ),
+        "system": {"months": "purnimanta", "calendar_filter": key},
+        "festivals": items,
+        "note": (
+            "Festival dates are sunrise-based. The same festival within "
+            "three days is collapsed to its first occurrence. The all "
+            "filter covers solar, amanta and purnimanta; pass gregorian "
+            "for civil holidays."
         ),
     }
 

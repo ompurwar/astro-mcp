@@ -15,7 +15,9 @@ from .engine import (
     DEFAULT_LONGITUDE,
     DEFAULT_TIMEZONE,
     bhava_chalit,
+    chara_dashas,
     dashas,
+    festivals,
     kundli,
     matching,
     muhurta,
@@ -54,16 +56,35 @@ AsOfTimezone = Annotated[
         )
     ),
 ]
+CharaMethod = Annotated[
+    str,
+    Field(
+        description=(
+            "Chara dasha method: kn_rao (default), pvn_rao, "
+            "irangatti_male or irangatti_female."
+        )
+    ),
+]
+FestivalCalendar = Annotated[
+    str,
+    Field(
+        description=(
+            "Calendar filter: all (default), purnimanta, amanta, solar "
+            "or gregorian."
+        )
+    ),
+]
 
 server = MCPServer(
     "astro-mcp",
-    version="0.3.1",
+    version="0.5.0",
     instructions=(
         "Vedic astrology using Drik ganita and a selectable ayanamsa "
         "(Lahiri by default). Panchang, kundli, varga charts, bhava "
-        "chalit, Vimshottari and Yogini dashas, transits with Sade Sati, "
-        "yogas and doshas, Shadbala and Ashtakavarga, guna milan and "
-        "muhurta. Defaults to Varanasi; pass coordinates for another place."
+        "chalit, Vimshottari, Yogini and Chara dashas, transits with Sade "
+        "Sati, yogas and doshas, Shadbala and Ashtakavarga, North and South "
+        "Indian guna milan with Manglik and D9 comparison, muhurta and "
+        "festivals. Defaults to Varanasi; pass coordinates for another place."
     ),
 )
 
@@ -479,6 +500,72 @@ def get_yogini_dashas(
 
 
 @server.tool()
+def get_chara_dashas(
+    date: Annotated[str, Field(description="Local birth date in YYYY-MM-DD format.")],
+    time: Annotated[
+        str, Field(description="Local birth time in 24-hour HH:MM format.")
+    ],
+    as_of: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Date in YYYY-MM-DD to evaluate the running dasha; "
+                "defaults to today."
+            )
+        ),
+    ] = None,
+    as_of_timezone: AsOfTimezone = None,
+    depth: Annotated[
+        int,
+        Field(
+            description=(
+                "Dasha depth: 1=maha, 2=antar (default), 3=pratyantar, "
+                "4=sookshma, 5=prana, 6=deha."
+            )
+        ),
+    ] = 2,
+    method: CharaMethod = "kn_rao",
+    latitude: Annotated[
+        float, Field(description="Latitude in degrees; north is positive.")
+    ] = DEFAULT_LATITUDE,
+    longitude: Annotated[
+        float, Field(description="Longitude in degrees; east is positive.")
+    ] = DEFAULT_LONGITUDE,
+    timezone: Annotated[
+        str | float,
+        Field(
+            description=(
+                "IANA timezone name (e.g. Asia/Kolkata) or a fixed UTC offset "
+                "in hours (e.g. 5.5)."
+            )
+        ),
+    ] = DEFAULT_TIMEZONE,
+    location_name: Annotated[
+        str, Field(description="Display name for the location.")
+    ] = DEFAULT_LOCATION,
+    ayanamsa: Ayanamsa = "LAHIRI",
+) -> dict[str, Any]:
+    """Return the Chara (Jaimini rasi) dasha timeline and running periods.
+
+    Each period is a rasi and its sign lord. Choose KN Rao, PVN Rao or the
+    Irangatti male/female method.
+    """
+    return chara_dashas(
+        date=date,
+        time=time,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+        location_name=location_name,
+        as_of=as_of,
+        as_of_timezone=as_of_timezone,
+        depth=depth,
+        method=method,
+        ayanamsa=ayanamsa,
+    )
+
+
+@server.tool()
 def get_strength(
     date: Annotated[str, Field(description="Local birth date in YYYY-MM-DD format.")],
     time: Annotated[
@@ -548,11 +635,38 @@ def get_matching(
         Field(description="Girl's timezone, if different from the boy's."),
     ] = None,
     ayanamsa: Ayanamsa = "LAHIRI",
+    system: Annotated[
+        str,
+        Field(
+            description=(
+                "Matching system: north (Ashtakoota, 36 points) or "
+                "south (Porutham, 10 checks)."
+            )
+        ),
+    ] = "north",
+    latitude: Annotated[
+        float, Field(description="Boy's latitude in degrees; north is positive.")
+    ] = DEFAULT_LATITUDE,
+    longitude: Annotated[
+        float, Field(description="Boy's longitude in degrees; east is positive.")
+    ] = DEFAULT_LONGITUDE,
+    location_name: Annotated[
+        str, Field(description="Display name for the location.")
+    ] = DEFAULT_LOCATION,
+    girl_latitude: Annotated[
+        float | None,
+        Field(description="Girl's latitude, if different from the boy's."),
+    ] = None,
+    girl_longitude: Annotated[
+        float | None,
+        Field(description="Girl's longitude, if different from the boy's."),
+    ] = None,
 ) -> dict[str, Any]:
-    """Return North Indian Ashtakoota guna milan for two birth charts.
+    """Return guna milan for two birth charts, with Manglik status.
 
-    Scores Varna, Vasiya, Gana, Tara, Yoni, Graha Maitri, Bhakoot and Nadi,
-    with the total out of 36 and traditional minimum verdict.
+    North Indian Ashtakoota scores out of 36; South Indian Porutham checks
+    10 poruthams with a 6/10 minimum. Manglik is computed from Mars' house
+    from the lagna with BV Raman exceptions applied.
     """
     return matching(
         boy_date=boy_date,
@@ -562,6 +676,12 @@ def get_matching(
         timezone=timezone,
         girl_timezone=girl_timezone,
         ayanamsa=ayanamsa,
+        system=system,
+        latitude=latitude,
+        longitude=longitude,
+        location_name=location_name,
+        girl_latitude=girl_latitude,
+        girl_longitude=girl_longitude,
     )
 
 
@@ -600,6 +720,51 @@ def get_muhurta(
         timezone=timezone,
         location_name=location_name,
         sunrise_convention=sunrise_convention,
+    )
+
+
+@server.tool()
+def get_festivals(
+    start_date: Annotated[
+        str, Field(description="Start date in YYYY-MM-DD format.")
+    ],
+    end_date: Annotated[
+        str | None,
+        Field(description="End date in YYYY-MM-DD; defaults to start_date."),
+    ] = None,
+    latitude: Annotated[
+        float, Field(description="Latitude in degrees; north is positive.")
+    ] = DEFAULT_LATITUDE,
+    longitude: Annotated[
+        float, Field(description="Longitude in degrees; east is positive.")
+    ] = DEFAULT_LONGITUDE,
+    timezone: Annotated[
+        str | float,
+        Field(
+            description=(
+                "IANA timezone name (e.g. Asia/Kolkata) or a fixed UTC offset "
+                "in hours (e.g. 5.5)."
+            )
+        ),
+    ] = DEFAULT_TIMEZONE,
+    location_name: Annotated[
+        str, Field(description="Display name for the location.")
+    ] = DEFAULT_LOCATION,
+    calendar: FestivalCalendar = "all",
+) -> dict[str, Any]:
+    """Return Hindu festivals in a date range.
+
+    Each item includes the purnimanta month, tithi and paksha, plus the
+    calendar the festival entry came from. The range is capped at 366 days.
+    """
+    return festivals(
+        start_date=start_date,
+        end_date=end_date,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+        location_name=location_name,
+        calendar=calendar,
     )
 
 
