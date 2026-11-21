@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import io
-from contextlib import redirect_stdout
+import threading
+from contextlib import contextmanager, redirect_stdout
 from datetime import date as Date
 from datetime import datetime, timedelta, timezone as fixed_timezone
 from typing import Any
@@ -23,6 +24,71 @@ DEFAULT_LATITUDE = 25.3176
 DEFAULT_LONGITUDE = 82.9739
 DEFAULT_TIMEZONE = "Asia/Kolkata"
 DEFAULT_LOCATION = "Varanasi"
+
+AYANAMSA_MODES = {
+    "LAHIRI": "Lahiri",
+    "RAMAN": "Raman",
+    "KP": "KP",
+    "TRUE_CHITRA": "True Chitra",
+    "TRUE_PUSHYA": "True Pushya",
+    "TRUE_REVATI": "True Revati",
+    "TRUE_MULA": "True Mula",
+    "YUKTESHWAR": "Yukteshwar",
+    "FAGAN": "Fagan/Bradley",
+    "USHASHASHI": "Ushashashi",
+    "SURYA_SIDDHANTA": "Surya Siddhanta",
+    "SURYA_SIDDHANTA_MSUN": "Surya Siddhanta (Mean Sun)",
+    "ARYABHATA": "Aryabhata",
+    "ARYABHATA_MSUN": "Aryabhata (Mean Sun)",
+    "SS_CITRA": "Surya Siddhanta Chitra",
+    "SS_REVATI": "Surya Siddhanta Revati",
+}
+
+VARGA_NAMES = {
+    1: "Rasi",
+    2: "Hora",
+    3: "Drekkana",
+    4: "Chaturthamsa",
+    5: "Panchamsa",
+    6: "Shashthamsa",
+    7: "Saptamsa",
+    8: "Ashtamsa",
+    9: "Navamsa",
+    10: "Dasamsa",
+    11: "Rudramsa",
+    12: "Dwadamsa",
+    16: "Shodamsa",
+    20: "Vimsamsa",
+    24: "Chaturvimsamsa",
+    27: "Nakshatramsa",
+    30: "Trisamsa",
+    40: "Khavedamsa",
+    45: "Akshavedamsa",
+    60: "Shastyamsa",
+}
+
+DASHA_LEVELS = (
+    "Mahadasha",
+    "Antardasha",
+    "Pratyantardasha",
+    "Sookshma",
+    "Prana",
+    "Deha",
+)
+
+_AYANAMSA_LOCK = threading.Lock()
+
+
+@contextmanager
+def _use_ayanamsa(mode: str):
+    key = mode.strip().upper()
+    if key not in AYANAMSA_MODES:
+        raise ValueError(
+            f"Unknown ayanamsa: {mode}. Supported: {', '.join(AYANAMSA_MODES)}"
+        )
+    with _AYANAMSA_LOCK:
+        drik.set_ayanamsa_mode(key)
+        yield AYANAMSA_MODES[key]
 
 PLANET_NAMES = (
     "Sun",
@@ -122,6 +188,7 @@ def panchang(
     longitude: float = DEFAULT_LONGITUDE,
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
+    ayanamsa: str = "LAHIRI",
 ) -> dict[str, Any]:
     """Return the five limbs of the panchang at sunrise for a date and place."""
     day = Date.fromisoformat(date)
@@ -131,18 +198,19 @@ def panchang(
     place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number((day.year, day.month, day.day), (12, 0, 0))
 
-    sunrise = drik.sunrise(jd, place)
-    sunset = drik.sunset(jd, place)
-    reference = sunrise[2]  # panchang elements are read at sunrise
+    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+        sunrise = drik.sunrise(jd, place)
+        sunset = drik.sunset(jd, place)
+        reference = sunrise[2]  # panchang elements are read at sunrise
 
-    tithi = drik.tithi(reference, place)
-    nakshatra = drik.nakshatra(reference, place)
-    yoga = drik.yogam(reference, place)
-    karana = drik.karana(reference, place)
-    vara = drik.civil_weekday(jd)
-    nak_start_day, nak_start_hours = _nakshatra_start(
-        reference, nakshatra[0], place
-    )
+        tithi = drik.tithi(reference, place)
+        nakshatra = drik.nakshatra(reference, place)
+        yoga = drik.yogam(reference, place)
+        karana = drik.karana(reference, place)
+        vara = drik.civil_weekday(jd)
+        nak_start_day, nak_start_hours = _nakshatra_start(
+            reference, nakshatra[0], place
+        )
 
     tithi_number = tithi[0]
     return {
@@ -152,7 +220,7 @@ def panchang(
         ),
         "system": {
             "panchanga": "Drik",
-            "ayanamsa": "Lahiri",
+            "ayanamsa": ayanamsa_label,
             "day_starts": "sunrise",
             "sunrise_convention": "Hindu rising (disc center, no refraction)",
         },
@@ -188,16 +256,38 @@ def panchang(
     }
 
 
-def _position(full_longitude: float, lagna_rasi: int) -> dict[str, Any]:
-    rasi = int(full_longitude // 30)
+def _base_position(full_longitude: float) -> dict[str, Any]:
+    rasi = int(full_longitude // 30) % 12
     nakshatra, pada, _ = drik.nakshatra_pada(full_longitude)
     return {
         "sign": RAASI_NAMES[rasi],
         "degree": round(full_longitude - rasi * 30, 2),
         "nakshatra": utils.NAKSHATRA_LIST[nakshatra - 1],
         "pada": pada,
-        "house": (rasi - lagna_rasi) % 12 + 1,
     }
+
+
+def _position(full_longitude: float, lagna_rasi: int) -> dict[str, Any]:
+    return {
+        **_base_position(full_longitude),
+        "house": (int(full_longitude // 30) - lagna_rasi) % 12 + 1,
+    }
+
+
+def _sign_degree(longitude: float) -> dict[str, Any]:
+    longitude %= 360
+    return {
+        "sign": RAASI_NAMES[int(longitude // 30)],
+        "degree": round(longitude % 30, 2),
+    }
+
+
+def _bhava_for_longitude(longitude: float, cusps: list[float]) -> int:
+    for index, start in enumerate(cusps):
+        span = (cusps[(index + 1) % 12] - start) % 360
+        if (longitude - start) % 360 < span:
+            return index + 1
+    raise ValueError("could not place longitude in a bhava")
 
 
 def kundli(
@@ -207,6 +297,7 @@ def kundli(
     longitude: float = DEFAULT_LONGITUDE,
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
+    ayanamsa: str = "LAHIRI",
 ) -> dict[str, Any]:
     """Return the birth chart (D1) for a local date, time and place."""
     day = Date.fromisoformat(date)
@@ -220,13 +311,15 @@ def kundli(
         (birth.hour, birth.minute, birth.second),
     )
 
-    lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = drik.ascendant(
-        jd, place
-    )
-    retrograde = set(drik.planets_in_retrograde(jd, place))
+    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+        lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = (
+            drik.ascendant(jd, place)
+        )
+        retrograde = set(drik.planets_in_retrograde(jd, place))
+        positions = drik.planetary_positions(jd, place)
 
     planets = []
-    for planet_id, (rasi, degree) in drik.planetary_positions(jd, place):
+    for planet_id, (rasi, degree) in positions:
         position = _position(rasi * 30 + degree, lagna_rasi)
         planets.append(
             {
@@ -243,7 +336,7 @@ def kundli(
             location_name, latitude, longitude, timezone, offset
         ),
         "system": {
-            "ayanamsa": "Lahiri",
+            "ayanamsa": ayanamsa_label,
             "houses": "whole sign from lagna",
         },
         "lagna": {
@@ -252,6 +345,166 @@ def kundli(
             "nakshatra": utils.NAKSHATRA_LIST[lagna_nakshatra - 1],
             "pada": lagna_pada,
         },
+        "planets": planets,
+    }
+
+
+def varga(
+    date: str,
+    time: str,
+    latitude: float = DEFAULT_LATITUDE,
+    longitude: float = DEFAULT_LONGITUDE,
+    timezone: str | float = DEFAULT_TIMEZONE,
+    location_name: str = DEFAULT_LOCATION,
+    division: int = 9,
+    ayanamsa: str = "LAHIRI",
+) -> dict[str, Any]:
+    """Return a divisional (varga) chart such as Navamsa D9 or Dasamsa D10."""
+    day = Date.fromisoformat(date)
+    birth = _birth_datetime(date, time)
+    _check_coordinates(latitude, longitude)
+    if division not in VARGA_NAMES:
+        raise ValueError(
+            f"Unsupported division: {division}. Supported: {sorted(VARGA_NAMES)}"
+        )
+
+    offset = _offset_hours(timezone, day)
+    place = drik.Place(location_name, latitude, longitude, offset)
+    jd = utils.julian_day_number(
+        (birth.year, birth.month, birth.day),
+        (birth.hour, birth.minute, birth.second),
+    )
+
+    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+        lagna_rasi, lagna_degree, _, _ = drik.ascendant(jd, place)
+        varga_lagna_rasi, _ = drik.dasavarga_from_long(
+            lagna_rasi * 30 + lagna_degree, division
+        )
+        retrograde = set(drik.planets_in_retrograde(jd, place))
+        positions = drik.dhasavarga(
+            jd, place, divisional_chart_factor=division
+        )
+
+    planets = [
+        {
+            "name": PLANET_NAMES[planet_id],
+            "sign": RAASI_NAMES[rasi],
+            "house": (rasi - varga_lagna_rasi) % 12 + 1,
+            "retrograde": planet_id in retrograde,
+        }
+        for planet_id, (rasi, _) in positions
+    ]
+
+    tz = fixed_timezone(timedelta(hours=offset))
+    return {
+        "datetime": birth.replace(tzinfo=tz).isoformat(timespec="seconds"),
+        "location": _location(
+            location_name, latitude, longitude, timezone, offset
+        ),
+        "system": {
+            "ayanamsa": ayanamsa_label,
+            "division": division,
+            "varga": VARGA_NAMES[division],
+        },
+        "lagna": {"sign": RAASI_NAMES[varga_lagna_rasi]},
+        "planets": planets,
+    }
+
+
+def bhava_chalit(
+    date: str,
+    time: str,
+    latitude: float = DEFAULT_LATITUDE,
+    longitude: float = DEFAULT_LONGITUDE,
+    timezone: str | float = DEFAULT_TIMEZONE,
+    location_name: str = DEFAULT_LOCATION,
+    house_system: str = "sripati",
+    ayanamsa: str = "LAHIRI",
+) -> dict[str, Any]:
+    """Return the degree-based bhava chalit chart."""
+    day = Date.fromisoformat(date)
+    birth = _birth_datetime(date, time)
+    _check_coordinates(latitude, longitude)
+
+    system_key = house_system.strip().lower()
+    if system_key not in ("sripati", "kp", "placidus", "equal"):
+        raise ValueError(
+            "house_system must be sripati, kp, placidus or equal"
+        )
+    labels = {
+        "sripati": "Sripati",
+        "kp": "KP (Placidus)",
+        "placidus": "Placidus",
+        "equal": "Equal houses",
+    }
+
+    offset = _offset_hours(timezone, day)
+    place = drik.Place(location_name, latitude, longitude, offset)
+    jd = utils.julian_day_number(
+        (birth.year, birth.month, birth.day),
+        (birth.hour, birth.minute, birth.second),
+    )
+
+    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+        lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = (
+            drik.ascendant(jd, place)
+        )
+        lagna_full = lagna_rasi * 30 + lagna_degree
+        if system_key == "sripati":
+            cusps = drik.bhaava_madhya(jd, place, 2)
+        elif system_key in ("kp", "placidus"):
+            cusps = drik.bhaava_madhya(jd, place, 1)
+        else:
+            cusps = [(lagna_full + index * 30) % 360 for index in range(12)]
+        cusps = [float(cusp) % 360 for cusp in cusps]
+        retrograde = set(drik.planets_in_retrograde(jd, place))
+        positions = drik.planetary_positions(jd, place)
+
+    names_by_house: dict[int, list[str]] = {index: [] for index in range(1, 13)}
+    planets = []
+    for planet_id, (rasi, degree) in positions:
+        full_longitude = rasi * 30 + degree
+        bhava = _bhava_for_longitude(full_longitude, cusps)
+        names_by_house[bhava].append(PLANET_NAMES[planet_id])
+        planets.append(
+            {
+                "name": PLANET_NAMES[planet_id],
+                **_base_position(full_longitude),
+                "bhava": bhava,
+                "retrograde": planet_id in retrograde,
+            }
+        )
+
+    houses = []
+    for index, start in enumerate(cusps):
+        end = cusps[(index + 1) % 12]
+        houses.append(
+            {
+                "house": index + 1,
+                "sign": RAASI_NAMES[int(start // 30)],
+                "start": _sign_degree(start),
+                "end": _sign_degree(end),
+                "planets": names_by_house[index + 1],
+            }
+        )
+
+    tz = fixed_timezone(timedelta(hours=offset))
+    return {
+        "datetime": birth.replace(tzinfo=tz).isoformat(timespec="seconds"),
+        "location": _location(
+            location_name, latitude, longitude, timezone, offset
+        ),
+        "system": {
+            "ayanamsa": ayanamsa_label,
+            "house_system": labels[system_key],
+        },
+        "lagna": {
+            "sign": RAASI_NAMES[lagna_rasi],
+            "degree": round(lagna_degree, 2),
+            "nakshatra": utils.NAKSHATRA_LIST[lagna_nakshatra - 1],
+            "pada": lagna_pada,
+        },
+        "houses": houses,
         "planets": planets,
     }
 
@@ -279,29 +532,21 @@ def dashas(
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
     as_of: str | None = None,
+    depth: int = 2,
+    ayanamsa: str = "LAHIRI",
 ) -> dict[str, Any]:
     """Return the Vimshottari mahadasha timeline and running periods."""
     day = Date.fromisoformat(date)
     birth = _birth_datetime(date, time)
     _check_coordinates(latitude, longitude)
+    if not 1 <= depth <= len(DASHA_LEVELS):
+        raise ValueError(f"depth must be between 1 and {len(DASHA_LEVELS)}")
 
     offset = _offset_hours(timezone, day)
     place = drik.Place(location_name, latitude, longitude, offset)
     dob = (birth.year, birth.month, birth.day)
     tob = (birth.hour, birth.minute, birth.second)
     jd = utils.julian_day_number(dob, tob)
-
-    balance, rows = vimsottari.get_dhasa_antardhasa(
-        dob,
-        tob,
-        place,
-        dhasa_level_index=const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY,
-        return_exact_bounds=True,
-    )
-    mahadashas = [
-        _dasha_period(lords, start, end, offset)
-        for lords, start, end, _ in rows
-    ]
 
     if as_of is not None:
         as_of_day = Date.fromisoformat(as_of)
@@ -317,17 +562,30 @@ def dashas(
     as_of_jd = utils.julian_day_number(
         (as_of_day.year, as_of_day.month, as_of_day.day), (12, 0, 0)
     )
-    running = [
-        {
-            "level": "Mahadasha" if len(lords) == 1 else "Antardasha",
-            "lord": PLANET_NAMES[lords[-1]],
-            "start": _tuple_iso(start, offset),
-            "end": _tuple_iso(end, offset),
-        }
-        for lords, start, end in vimsottari.get_running_dhasa_for_given_date(
-            as_of_jd, jd, place, dhasa_level_index=2
+
+    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+        balance, rows = vimsottari.get_dhasa_antardhasa(
+            dob,
+            tob,
+            place,
+            dhasa_level_index=const.MAHA_DHASA_DEPTH.MAHA_DHASA_ONLY,
+            return_exact_bounds=True,
         )
-    ]
+        mahadashas = [
+            _dasha_period(lords, start, end, offset)
+            for lords, start, end, _ in rows
+        ]
+        running = [
+            {
+                "level": DASHA_LEVELS[len(lords) - 1],
+                "lord": PLANET_NAMES[lords[-1]],
+                "start": _tuple_iso(start, offset),
+                "end": _tuple_iso(end, offset),
+            }
+            for lords, start, end in vimsottari.get_running_dhasa_for_given_date(
+                as_of_jd, jd, place, dhasa_level_index=depth
+            )
+        ]
 
     return {
         "datetime": birth.replace(
@@ -337,7 +595,11 @@ def dashas(
         "location": _location(
             location_name, latitude, longitude, timezone, offset
         ),
-        "system": {"dasha": "Vimshottari"},
+        "system": {
+            "dasha": "Vimshottari",
+            "ayanamsa": ayanamsa_label,
+            "depth": depth,
+        },
         "balance_at_birth": {
             "years": balance[0],
             "months": balance[1],

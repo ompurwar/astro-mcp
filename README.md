@@ -9,20 +9,26 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 | --- | --- |
 | `get_panchang` | Sunrise, sunset, vara, tithi, nakshatra, yoga and karana, with start and end times. |
 | `get_kundli` | D1 birth chart: lagna and planets with sign, degree, nakshatra, pada, whole-sign house and retrograde state. |
-| `get_dashas` | Vimshottari mahadasha timeline, the balance at birth, and the mahadasha/antardasha running on a date. |
+| `get_varga` | Divisional chart: Navamsa D9, Dasamsa D10, Saptamsa D7, and the other standard vargas. |
+| `get_bhava_chalit` | Degree-based house cusps (Sripati, KP/Placidus or equal) and each planet's bhava. |
+| `get_dashas` | Vimshottari timeline, balance at birth, and the running chain down to pratyantar, sookshma, prana or deha. |
 | `get_muhurta` | Abhijit and Brahma muhurta, Rahu kaalam, Yamagandam, Gulika and Durmuhurtam. |
 
 ## Defaults
 
 - Location: Varanasi (25.3176 N, 82.9739 E), `Asia/Kolkata`
-- Ayanamsa: Lahiri / Chitrapaksha
+- Ayanamsa: Lahiri / Chitrapaksha, selectable per request (`RAMAN`, `KP`,
+  `TRUE_CHITRA`, `TRUE_PUSHYA`, `YUKTESHWAR`, `FAGAN`, `SURYA_SIDDHANTA`, ...)
 - Panchang: Drik ganita, sunrise-based day
 - Sunrise: Hindu rising convention (disc center, no refraction)
-- Houses: whole sign from lagna
+- Houses: whole sign for D1; Sripati, KP/Placidus or equal for bhava chalit
+- Dasha: Vimshottari, running chain to any depth from maha to deha
 - Months and festivals (when added): purnimanta
 
 Every tool accepts `latitude`, `longitude`, `timezone` (an IANA name or a fixed
-UTC offset in hours) and `location_name` to override the defaults.
+UTC offset in hours) and `location_name` to override the defaults. The chart
+tools (`get_panchang`, `get_kundli`, `get_varga`, `get_bhava_chalit` and
+`get_dashas`) also accept `ayanamsa`.
 
 ## Install
 
@@ -101,10 +107,22 @@ Point any MCP client at the installed executable:
 {"date": "1990-01-01", "time": "12:00"}
 ```
 
-`get_dashas` (defaults `as_of` to today):
+`get_varga` (D9 by default):
 
 ```json
-{"date": "1990-01-01", "time": "12:00", "as_of": "2026-11-20"}
+{"date": "1990-01-01", "time": "12:00", "division": 9}
+```
+
+`get_bhava_chalit` (Sripati by default):
+
+```json
+{"date": "1990-01-01", "time": "12:00", "house_system": "kp"}
+```
+
+`get_dashas` (defaults `as_of` to today; `depth` 3 adds pratyantar):
+
+```json
+{"date": "1990-01-01", "time": "12:00", "as_of": "2026-11-20", "depth": 3}
 ```
 
 `get_muhurta`:

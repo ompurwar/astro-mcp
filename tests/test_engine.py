@@ -8,10 +8,12 @@ import pytest
 
 from astro_mcp.engine import (
     PLANET_NAMES,
+    bhava_chalit,
     dashas,
     kundli,
     muhurta,
     panchang,
+    varga,
 )
 
 
@@ -103,6 +105,76 @@ def test_muhurta_varanasi_reference():
     assert result["abhijit"]["start"].startswith("2026-11-20T11:22")
     assert result["brahma"]["start"].startswith("2026-11-20T04:36")
     assert len(result["durmuhurtam"]) == 2
+
+
+def test_ayanamsa_changes_lagna():
+    lahiri = kundli("1990-01-01", "12:00")
+    raman = kundli("1990-01-01", "12:00", ayanamsa="RAMAN")
+
+    assert raman["system"]["ayanamsa"] == "Raman"
+    assert raman["lagna"]["degree"] != lahiri["lagna"]["degree"]
+
+
+def test_varga_navamsa_and_dasamsa():
+    navamsa = varga("1990-01-01", "12:00", division=9)
+    assert navamsa["system"]["varga"] == "Navamsa"
+    assert navamsa["lagna"]["sign"] == "Capricorn"
+    planets = {planet["name"]: planet for planet in navamsa["planets"]}
+    assert planets["Sun"]["sign"] == "Virgo"
+    assert planets["Moon"]["sign"] == "Scorpio"
+    assert planets["Venus"]["sign"] == "Aries"
+    assert planets["Rahu"]["house"] == 7
+
+    dasamsa = varga("1990-01-01", "12:00", division=10)
+    assert dasamsa["system"]["varga"] == "Dasamsa"
+    assert dasamsa["lagna"]["sign"] == "Capricorn"
+    planets = {planet["name"]: planet for planet in dasamsa["planets"]}
+    assert planets["Sun"]["sign"] == "Taurus"
+    assert planets["Moon"]["sign"] == "Libra"
+    assert planets["Mars"]["sign"] == "Cancer"
+
+
+def test_bhava_chalit_sripati_and_kp():
+    sripati = bhava_chalit("1990-01-01", "12:00", house_system="sripati")
+    assert sripati["system"]["house_system"] == "Sripati"
+    assert sripati["houses"][0]["start"] == {
+        "sign": "Pisces",
+        "degree": 21.45,
+    }
+    planets = {planet["name"]: planet for planet in sripati["planets"]}
+    assert planets["Moon"]["bhava"] == 11
+    assert planets["Mercury"]["bhava"] == 10
+    assert planets["Ketu"]["bhava"] == 5
+
+    kp = bhava_chalit("1990-01-01", "12:00", house_system="kp")
+    assert kp["system"]["house_system"] == "KP (Placidus)"
+    planets = {planet["name"]: planet for planet in kp["planets"]}
+    assert planets["Venus"]["bhava"] == 11
+
+
+def test_dasha_depth_includes_pratyantar():
+    result = dashas(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4676,
+        longitude=82.9933,
+        location_name="Obra",
+        as_of="2026-11-21",
+        depth=3,
+    )
+
+    assert [period["level"] for period in result["running"]] == [
+        "Mahadasha",
+        "Antardasha",
+        "Pratyantardasha",
+    ]
+    assert [period["lord"] for period in result["running"]] == [
+        "Jupiter",
+        "Saturn",
+        "Mercury",
+    ]
+    assert result["running"][2]["start"].startswith("2026-07-15")
+    assert result["running"][2]["end"].startswith("2026-11-24")
 
 
 def test_import_keeps_stdout_clean():

@@ -14,15 +14,27 @@ from .engine import (
     DEFAULT_LOCATION,
     DEFAULT_LONGITUDE,
     DEFAULT_TIMEZONE,
+    bhava_chalit,
     dashas,
     kundli,
     muhurta,
     panchang,
+    varga,
 )
+
+Ayanamsa = Annotated[
+    str,
+    Field(
+        description=(
+            "Ayanamsa mode: LAHIRI (default), RAMAN, KP, TRUE_CHITRA, "
+            "TRUE_PUSHYA, YUKTESHWAR, FAGAN or SURYA_SIDDHANTA."
+        )
+    ),
+]
 
 server = MCPServer(
     "astro-mcp",
-    version="0.1.0",
+    version="0.2.0",
     instructions=(
         "Vedic panchang calculations using Drik ganita and Lahiri ayanamsa. "
         "Defaults to Varanasi; pass coordinates for another place."
@@ -51,6 +63,7 @@ def get_panchang(
     location_name: Annotated[
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
+    ayanamsa: Ayanamsa = "LAHIRI",
 ) -> dict[str, Any]:
     """Return sunrise, sunset, tithi, nakshatra, yoga, karana and vara for a date.
 
@@ -63,6 +76,7 @@ def get_panchang(
         longitude=longitude,
         timezone=timezone,
         location_name=location_name,
+        ayanamsa=ayanamsa,
     )
 
 
@@ -90,11 +104,12 @@ def get_kundli(
     location_name: Annotated[
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
+    ayanamsa: Ayanamsa = "LAHIRI",
 ) -> dict[str, Any]:
     """Return the D1 birth chart for a local date, time and place.
 
     Includes the lagna and each planet's sign, degree, nakshatra, pada,
-    whole-sign house and retrograde state. Uses Lahiri ayanamsa.
+    whole-sign house and retrograde state.
     """
     return kundli(
         date=date,
@@ -103,6 +118,7 @@ def get_kundli(
         longitude=longitude,
         timezone=timezone,
         location_name=location_name,
+        ayanamsa=ayanamsa,
     )
 
 
@@ -139,11 +155,21 @@ def get_dashas(
             )
         ),
     ] = None,
+    depth: Annotated[
+        int,
+        Field(
+            description=(
+                "Dasha depth: 1=maha, 2=antar (default), 3=pratyantar, "
+                "4=sookshma, 5=prana, 6=deha."
+            )
+        ),
+    ] = 2,
+    ayanamsa: Ayanamsa = "LAHIRI",
 ) -> dict[str, Any]:
     """Return the Vimshottari mahadasha timeline and the running periods.
 
-    Includes the mahadasha balance at birth and the mahadasha/antardasha
-    running on as_of. Uses Lahiri ayanamsa.
+    Includes the mahadasha balance at birth and the running chain up to
+    the requested depth on as_of.
     """
     return dashas(
         date=date,
@@ -153,6 +179,109 @@ def get_dashas(
         timezone=timezone,
         location_name=location_name,
         as_of=as_of,
+        depth=depth,
+        ayanamsa=ayanamsa,
+    )
+
+
+@server.tool()
+def get_varga(
+    date: Annotated[str, Field(description="Local birth date in YYYY-MM-DD format.")],
+    time: Annotated[
+        str, Field(description="Local birth time in 24-hour HH:MM format.")
+    ],
+    division: Annotated[
+        int,
+        Field(
+            description=(
+                "Varga division: 9=Navamsa (default), 10=Dasamsa, "
+                "7=Saptamsa, 12=Dwadamsa, 60=Shastyamsa, etc."
+            )
+        ),
+    ] = 9,
+    latitude: Annotated[
+        float, Field(description="Latitude in degrees; north is positive.")
+    ] = DEFAULT_LATITUDE,
+    longitude: Annotated[
+        float, Field(description="Longitude in degrees; east is positive.")
+    ] = DEFAULT_LONGITUDE,
+    timezone: Annotated[
+        str | float,
+        Field(
+            description=(
+                "IANA timezone name (e.g. Asia/Kolkata) or a fixed UTC offset "
+                "in hours (e.g. 5.5)."
+            )
+        ),
+    ] = DEFAULT_TIMEZONE,
+    location_name: Annotated[
+        str, Field(description="Display name for the location.")
+    ] = DEFAULT_LOCATION,
+    ayanamsa: Ayanamsa = "LAHIRI",
+) -> dict[str, Any]:
+    """Return a divisional (varga) chart such as Navamsa D9 or Dasamsa D10.
+
+    Varga charts show signs and whole-sign houses from the varga lagna.
+    """
+    return varga(
+        date=date,
+        time=time,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+        location_name=location_name,
+        division=division,
+        ayanamsa=ayanamsa,
+    )
+
+
+@server.tool()
+def get_bhava_chalit(
+    date: Annotated[str, Field(description="Local birth date in YYYY-MM-DD format.")],
+    time: Annotated[
+        str, Field(description="Local birth time in 24-hour HH:MM format.")
+    ],
+    house_system: Annotated[
+        str,
+        Field(
+            description=(
+                "House system: sripati (default), kp/placidus, or equal."
+            )
+        ),
+    ] = "sripati",
+    latitude: Annotated[
+        float, Field(description="Latitude in degrees; north is positive.")
+    ] = DEFAULT_LATITUDE,
+    longitude: Annotated[
+        float, Field(description="Longitude in degrees; east is positive.")
+    ] = DEFAULT_LONGITUDE,
+    timezone: Annotated[
+        str | float,
+        Field(
+            description=(
+                "IANA timezone name (e.g. Asia/Kolkata) or a fixed UTC offset "
+                "in hours (e.g. 5.5)."
+            )
+        ),
+    ] = DEFAULT_TIMEZONE,
+    location_name: Annotated[
+        str, Field(description="Display name for the location.")
+    ] = DEFAULT_LOCATION,
+    ayanamsa: Ayanamsa = "LAHIRI",
+) -> dict[str, Any]:
+    """Return the degree-based bhava chalit chart.
+
+    Includes the 12 house cusps and each planet's bhava placement.
+    """
+    return bhava_chalit(
+        date=date,
+        time=time,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+        location_name=location_name,
+        house_system=house_system,
+        ayanamsa=ayanamsa,
     )
 
 
