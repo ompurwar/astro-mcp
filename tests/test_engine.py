@@ -261,9 +261,9 @@ def test_matching_ashtakoota():
         "bhakoot",
         "nadi",
     }
-    assert result["total"] == 16.0
+    assert result["total"] == 20.0
     assert result["max"] == 36
-    assert result["verdict"] == "below traditional minimum"
+    assert result["verdict"] == "recommended"
     assert result["manglik"]["boy"]["effective"] is False
     assert result["manglik"]["girl"]["effective"] is False
 
@@ -284,6 +284,32 @@ def test_matching_navamsa_comparison():
     assert result["navamsa"]["lagna_house_from_boy"] == 7
     assert result["navamsa"]["moon_house_from_boy"] == 6
     assert result["navamsa"]["lagna_lord_friendship"] == "neutral"
+
+
+def test_matching_fixes_tara_and_varna_kutas():
+    result = matching(
+        "1995-05-12",
+        "07:00",
+        "1993-03-20",
+        "07:05",
+        latitude=24.45,
+        longitude=82.98,
+        location_name="Obra",
+        girl_latitude=27.49,
+        girl_longitude=77.67,
+    )
+
+    assert result["scores"]["varna"] == 1
+    assert result["scores"]["tara"] == 3.0
+    assert result["total"] == 20.0
+    assert result["verdict"] == "recommended"
+
+
+def test_matching_tara_for_uttara_phalguni():
+    for time, expected in (("03:45", 15.0), ("15:45", 26.0)):
+        result = matching("1995-05-12", "07:00", "1995-09-24", time)
+        assert result["scores"]["tara"] == 3.0
+        assert result["total"] == expected
 
 
 def test_matching_south_indian_porutham():
@@ -314,7 +340,7 @@ def test_matching_accepts_utc_girl_timezone():
 
     assert result["girl"]["datetime"] == "1990-01-01T12:00:00+00:00"
     assert result["girl"]["nakshatra"] == "Shatabhisha"
-    assert result["total"] == 8.5
+    assert result["total"] == 9.5
 
 
 def test_surya_siddhanta_is_applied_to_matching():
@@ -330,7 +356,7 @@ def test_surya_siddhanta_is_applied_to_matching():
     assert surya["system"]["ayanamsa"] == "Surya Siddhanta"
     assert surya["boy"]["degree"] != lahiri["boy"]["degree"]
     assert surya["girl"]["nakshatra"] == "Shatabhisha"
-    assert surya["total"] == 8.5
+    assert surya["total"] == 9.5
 
 
 def test_yogini_dashas_running_chain():

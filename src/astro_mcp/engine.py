@@ -27,8 +27,14 @@ with redirect_stdout(io.StringIO()):
     )
     from jhora.horoscope.dhasa.graha import vimsottari, yogini
     from jhora.horoscope.dhasa.raasi import chara
+    from jhora.horoscope.match import compatibility as _compatibility
     from jhora.horoscope.match.compatibility import Ashtakoota
     from jhora.panchanga import vratha
+
+# PyJHora 5.0.0 labels earth signs as Shudra and air signs as Vaishya.
+# The classical element mapping is water=Brahmin, fire=Kshatriya,
+# earth=Vaishya, air=Shudra.
+_compatibility.vasiya_raasi_list[:] = [1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0]
 
 # Lahiri/Chitrapaksha is the standard for Indian calendars and the Kashi panchang.
 drik.set_ayanamsa_mode("LAHIRI")
@@ -281,6 +287,16 @@ def _friendship(planet_id: int) -> dict[str, list[str]]:
             continue
         groups[labels[relation]].append(PLANET_NAMES[other])
     return groups
+
+
+def _tara_score(ashtakoota: Ashtakoota) -> float:
+    """Return Tara kuta with PyJHora's inverted remainder rule fixed."""
+
+    def one(count: int) -> float:
+        # Remainders 3, 5 and 7 are the inauspicious Taras.
+        return 0.0 if count % 9 in (3, 5, 7) else 1.5
+
+    return one(ashtakoota.count_from_girl) + one(ashtakoota.count_from_boy)
 
 
 def _manglik_status(
@@ -1050,7 +1066,9 @@ def matching(
             "nadi",
         )
         scores = dict(zip(labels, values[:8]))
-        total = values[8]
+        tara = _tara_score(ashtakoota)
+        scores["tara"] = tara
+        total = values[8] - values[3] + tara
         maximum = 36
         verdict = (
             "recommended" if total >= 18 else "below traditional minimum"

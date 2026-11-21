@@ -171,7 +171,9 @@ Point any MCP client at the installed executable:
 ```
 
 `get_matching` (boy and girl birth details; add `"system": "south"` for
-Porutham):
+Porutham). Tara uses the classical 3/5/7 inauspicious remainders and Varna
+uses the element mapping (water Brahmin, fire Kshatriya, earth Vaishya, air
+Shudra):
 
 ```json
 {
