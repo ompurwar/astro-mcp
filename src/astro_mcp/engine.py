@@ -299,6 +299,54 @@ def _tara_score(ashtakoota: Ashtakoota) -> float:
     return one(ashtakoota.count_from_girl) + one(ashtakoota.count_from_boy)
 
 
+# Rows are the boy's gana, columns the girl's: Deva, Manushya, Rakshasa.
+GANA_TABLE = [
+    [6, 6, 1],
+    [5, 6, 0],
+    [1, 0, 6],
+]
+
+
+def _gana_score(ashtakoota: Ashtakoota) -> int:
+    boy_gana = ashtakoota._find_gana(ashtakoota.boy_nakshatra_number - 1)
+    girl_gana = ashtakoota._find_gana(ashtakoota.girl_nakshatra_number - 1)
+    return GANA_TABLE[boy_gana][girl_gana]
+
+
+# Rows are the girl's vasiya group, columns the boy's:
+# Chatushpada, Manava, Jalachara, Vanachara, Keeta.
+VASIYA_TABLE = [
+    [2.0, 0.5, 1.0, 0.0, 2.0],
+    [0.5, 2.0, 0.0, 0.0, 0.0],
+    [1.0, 0.0, 2.0, 2.0, 2.0],
+    [0.0, 0.0, 2.0, 2.0, 0.0],
+    [1.0, 0.0, 1.0, 0.0, 2.0],
+]
+VASIYA_GROUPS = (0, 0, 1, 2, 3, 1, 1, 4, 1, 2, 1, 2)
+
+
+def _vasiya_group(rasi: int, degree: float, method: str) -> int:
+    if method == "whole_sign":
+        # Some apps treat all of Sagittarius as Manava and all of
+        # Capricorn as Jalachara instead of splitting them at 15 degrees.
+        return 1 if rasi == 8 else 2 if rasi == 9 else VASIYA_GROUPS[rasi]
+    if rasi == 8:
+        return 1 if degree < 15 else 0
+    if rasi == 9:
+        return 0 if degree < 15 else 2
+    return VASIYA_GROUPS[rasi]
+
+
+def _vasiya_score(
+    boy: dict[str, Any], girl: dict[str, Any], method: str
+) -> float:
+    boy_group = _vasiya_group(RAASI_NAMES.index(boy["sign"]), boy["degree"], method)
+    girl_group = _vasiya_group(
+        RAASI_NAMES.index(girl["sign"]), girl["degree"], method
+    )
+    return VASIYA_TABLE[girl_group][boy_group]
+
+
 def _manglik_status(
     date: str,
     time: str,
@@ -994,6 +1042,7 @@ def matching(
     girl_timezone: str | float | None = None,
     ayanamsa: str = "LAHIRI",
     system: str = "north",
+    vasiya_method: str = "classical",
     latitude: float = DEFAULT_LATITUDE,
     longitude: float = DEFAULT_LONGITUDE,
     location_name: str = DEFAULT_LOCATION,
@@ -1004,6 +1053,8 @@ def matching(
     key = system.strip().lower()
     if key not in ("north", "south"):
         raise ValueError("system must be north or south")
+    if vasiya_method not in ("classical", "whole_sign"):
+        raise ValueError("vasiya_method must be classical or whole_sign")
     _check_coordinates(latitude, longitude)
     girl_lat = latitude if girl_latitude is None else girl_latitude
     girl_lon = longitude if girl_longitude is None else girl_longitude
@@ -1050,6 +1101,7 @@ def matching(
         )
         extras = {"minimum_porutham": minimum_porutham}
         method_label = "South Indian Porutham"
+        extra_system = {}
         note = (
             "South Indian matching scores 10 poruthams; 6/10 and the "
             "minimum poruthams are the traditional minimum."
@@ -1067,8 +1119,20 @@ def matching(
         )
         scores = dict(zip(labels, values[:8]))
         tara = _tara_score(ashtakoota)
+        gana = _gana_score(ashtakoota)
+        vasiya = _vasiya_score(boy, girl, vasiya_method)
         scores["tara"] = tara
-        total = values[8] - values[3] + tara
+        scores["gana"] = gana
+        scores["vasiya"] = vasiya
+        total = (
+            values[8]
+            - values[3]
+            + tara
+            - values[2]
+            + gana
+            - values[1]
+            + vasiya
+        )
         maximum = 36
         verdict = (
             "recommended" if total >= 18 else "below traditional minimum"
@@ -1080,6 +1144,7 @@ def matching(
             "shree_dheerga": values[12],
         }
         method_label = "North Indian Ashtakoota"
+        extra_system = {"vasiya_method": vasiya_method}
         note = (
             "18/36 is the traditional minimum; this is not a substitute "
             "for a full chart comparison."
@@ -1177,6 +1242,7 @@ def matching(
         "system": {
             "ayanamsa": boy["ayanamsa"],
             "method": method_label,
+            **extra_system,
         },
         "note": note,
     }

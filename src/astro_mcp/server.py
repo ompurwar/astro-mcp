@@ -56,6 +56,16 @@ AsOfTimezone = Annotated[
         )
     ),
 ]
+VasiyaMethod = Annotated[
+    str,
+    Field(
+        description=(
+            "Vasiya table for North Indian matching: classical (default, "
+            "Sagittarius and Capricorn split at 15 degrees) or whole_sign "
+            "(all Sagittarius Manava, all Capricorn Jalachara)."
+        )
+    ),
+]
 CharaMethod = Annotated[
     str,
     Field(
@@ -77,7 +87,7 @@ FestivalCalendar = Annotated[
 
 server = MCPServer(
     "astro-mcp",
-    version="0.5.1",
+    version="0.5.2",
     instructions=(
         "Vedic astrology using Drik ganita and a selectable ayanamsa "
         "(Lahiri by default). Panchang, kundli, varga charts, bhava "
@@ -644,6 +654,7 @@ def get_matching(
             )
         ),
     ] = "north",
+    vasiya_method: VasiyaMethod = "classical",
     latitude: Annotated[
         float, Field(description="Boy's latitude in degrees; north is positive.")
     ] = DEFAULT_LATITUDE,
@@ -666,7 +677,8 @@ def get_matching(
 
     North Indian Ashtakoota scores out of 36; South Indian Porutham checks
     10 poruthams with a 6/10 minimum. Manglik is computed from Mars' house
-    from the lagna with BV Raman exceptions applied.
+    from the lagna with BV Raman exceptions applied. Vasiya can use the
+    classical half-sign split or the whole-sign convention.
     """
     return matching(
         boy_date=boy_date,
@@ -677,6 +689,7 @@ def get_matching(
         girl_timezone=girl_timezone,
         ayanamsa=ayanamsa,
         system=system,
+        vasiya_method=vasiya_method,
         latitude=latitude,
         longitude=longitude,
         location_name=location_name,

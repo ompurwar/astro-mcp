@@ -17,7 +17,7 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 | `get_chara_dashas` | Chara (Jaimini rasi) dasha with KN Rao, PVN Rao or Irangatti methods. |
 | `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas. |
 | `get_strength` | Shadbala, Sarvashtakavarga and Bhinnashtakavarga bindus. |
-| `get_matching` | North Indian Ashtakoota (36 points) or South Indian Porutham (10 checks), plus Manglik status and a D9 comparison. |
+| `get_matching` | North Indian Ashtakoota (36 points) or South Indian Porutham (10 checks), plus Manglik status and a D9 comparison. Vasiya can use the classical or whole-sign convention. |
 | `get_muhurta` | Abhijit and Brahma muhurta, Rahu kaalam, Yamagandam, Gulika and Durmuhurtam. |
 | `get_festivals` | Hindu festivals in a date range, with purnimanta month, tithi and paksha. |
 
@@ -32,7 +32,8 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 - Dasha: Vimshottari, Yogini and Chara, running chain to any depth from maha to deha
 - Strength: Shadbala and Ashtakavarga
 - Matching: North Indian Ashtakoota (36 points) or South Indian Porutham
-  (10 checks), with Manglik status and a D9 comparison
+  (10 checks), with Manglik status and a D9 comparison; Vasiya uses the
+  classical half-sign split by default
 - Months and festivals: purnimanta
 
 Place-based tools accept `latitude`, `longitude`, `timezone` (an IANA name or a
@@ -171,15 +172,16 @@ Point any MCP client at the installed executable:
 ```
 
 `get_matching` (boy and girl birth details; add `"system": "south"` for
-Porutham). Tara uses the classical 3/5/7 inauspicious remainders and Varna
+Porutham). Tara uses the classical 3/5/7 inauspicious remainders, Varna
 uses the element mapping (water Brahmin, fire Kshatriya, earth Vaishya, air
-Shudra):
+Shudra), and Gana is read boy-to-girl. Add `"vasiya_method": "whole_sign"`
+to treat all of Sagittarius as Manava and all of Capricorn as Jalachara:
 
 ```json
 {
   "boy_date": "1995-05-12", "boy_time": "07:00",
   "girl_date": "1990-01-01", "girl_time": "12:00",
-  "system": "north"
+  "system": "north", "vasiya_method": "classical"
 }
 ```
 

@@ -306,10 +306,47 @@ def test_matching_fixes_tara_and_varna_kutas():
 
 
 def test_matching_tara_for_uttara_phalguni():
-    for time, expected in (("03:45", 15.0), ("15:45", 26.0)):
+    for time, expected in (("03:45", 16.0), ("15:45", 27.0)):
         result = matching("1995-05-12", "07:00", "1995-09-24", time)
         assert result["scores"]["tara"] == 3.0
+        assert result["scores"]["gana"] == 6
         assert result["total"] == expected
+
+
+def test_matching_gana_uses_boy_to_girl_direction():
+    result = matching(
+        "1995-05-12",
+        "07:00",
+        "1998-03-22",
+        "18:58",
+        latitude=24.45,
+        longitude=82.98,
+        location_name="Obra",
+        girl_latitude=28.41,
+        girl_longitude=77.31,
+    )
+
+    assert result["scores"]["gana"] == 6
+    assert result["total"] == 25.5
+
+
+def test_matching_whole_sign_vasiya():
+    result = matching(
+        "1995-05-12",
+        "07:00",
+        "1998-03-22",
+        "18:58",
+        latitude=24.45,
+        longitude=82.98,
+        location_name="Obra",
+        girl_latitude=28.41,
+        girl_longitude=77.31,
+        vasiya_method="whole_sign",
+    )
+
+    assert result["scores"]["vasiya"] == 2.0
+    assert result["total"] == 27.0
+    assert result["system"]["vasiya_method"] == "whole_sign"
 
 
 def test_matching_south_indian_porutham():
