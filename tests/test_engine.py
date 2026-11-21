@@ -341,12 +341,12 @@ def test_matching_whole_sign_vasiya():
         location_name="Obra",
         girl_latitude=28.41,
         girl_longitude=77.31,
-        vasiya_method="whole_sign",
+        vasya_convention="whole_sign",
     )
 
     assert result["scores"]["vasiya"] == 2.0
     assert result["total"] == 27.0
-    assert result["system"]["vasiya_method"] == "whole_sign"
+    assert result["system"]["vasya_convention"] == "whole_sign"
 
 
 def test_matching_south_indian_porutham():
@@ -500,6 +500,31 @@ def test_d9_aspects_and_friendship():
         "neutral",
         "enemies",
     }
+
+
+def test_kundli_mean_and_true_nodes():
+    true = kundli(
+        "1993-03-20",
+        "07:05",
+        latitude=27.49,
+        longitude=77.67,
+        location_name="Bareilly",
+    )
+    mean = kundli(
+        "1993-03-20",
+        "07:05",
+        latitude=27.49,
+        longitude=77.67,
+        location_name="Bareilly",
+        node_type="mean",
+    )
+    true_rahu = next(p for p in true["planets"] if p["name"] == "Rahu")
+    mean_rahu = next(p for p in mean["planets"] if p["name"] == "Rahu")
+
+    assert true["system"]["node_type"] == "True node"
+    assert mean["system"]["node_type"] == "Mean node"
+    assert true_rahu["degree"] == 21.95
+    assert mean_rahu["degree"] == 22.52
 
 
 def test_import_keeps_stdout_clean():

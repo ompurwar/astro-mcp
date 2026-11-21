@@ -15,7 +15,7 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 | `get_dashas` | Vimshottari timeline, balance at birth, and the running chain down to pratyantar, sookshma, prana or deha. |
 | `get_yogini_dashas` | Yogini dasha timeline and running chain, with Yogini names and ruling planets. |
 | `get_chara_dashas` | Chara (Jaimini rasi) dasha with KN Rao, PVN Rao or Irangatti methods. |
-| `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas. |
+| `get_yogas` | Classical yogas and doshas, including Manglik, Kala Sarpa, Pitru and Raja yogas, plus a list of opposing yoga pairs. |
 | `get_strength` | Shadbala, Sarvashtakavarga and Bhinnashtakavarga bindus. |
 | `get_matching` | North Indian Ashtakoota (36 points) or South Indian Porutham (10 checks), plus Manglik status and a D9 comparison. Vasiya can use the classical or whole-sign convention. |
 | `get_muhurta` | Abhijit and Brahma muhurta, Rahu kaalam, Yamagandam, Gulika and Durmuhurtam. |
@@ -33,14 +33,16 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 - Strength: Shadbala and Ashtakavarga
 - Matching: North Indian Ashtakoota (36 points) or South Indian Porutham
   (10 checks), with Manglik status and a D9 comparison; Vasiya uses the
-  classical half-sign split by default
+  split half-sign convention by default
 - Months and festivals: purnimanta
 
 Place-based tools accept `latitude`, `longitude`, `timezone` (an IANA name or a
 fixed UTC offset in hours) and `location_name` to override the defaults. The
 chart tools (`get_panchang`, `get_kundli`, `get_varga`, `get_bhava_chalit`,
 `get_dashas`, `get_yogini_dashas`, `get_chara_dashas`, `get_transits`,
-`get_yogas` and `get_strength`) also accept `ayanamsa`. `get_matching` takes
+`get_yogas` and `get_strength`) also accept `ayanamsa`. The chart tools
+(`get_kundli`, `get_varga`, `get_bhava_chalit`, `get_transits` and `get_yogas`)
+also accept `node_type` (`true` by default, or `mean`). `get_matching` takes
 two birth times
 and a timezone; coordinates are only needed for the Manglik and D9 checks, and
 `girl_latitude`/`girl_longitude` cover a girl born elsewhere. `system` selects
@@ -174,14 +176,14 @@ Point any MCP client at the installed executable:
 `get_matching` (boy and girl birth details; add `"system": "south"` for
 Porutham). Tara uses the classical 3/5/7 inauspicious remainders, Varna
 uses the element mapping (water Brahmin, fire Kshatriya, earth Vaishya, air
-Shudra), and Gana is read boy-to-girl. Add `"vasiya_method": "whole_sign"`
+Shudra), and Gana is read boy-to-girl. Add `"vasya_convention": "whole_sign"`
 to treat all of Sagittarius as Manava and all of Capricorn as Jalachara:
 
 ```json
 {
   "boy_date": "1995-05-12", "boy_time": "07:00",
   "girl_date": "1990-01-01", "girl_time": "12:00",
-  "system": "north", "vasiya_method": "classical"
+  "system": "north", "vasya_convention": "split"
 }
 ```
 

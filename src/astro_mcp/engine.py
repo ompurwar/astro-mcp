@@ -141,11 +141,24 @@ FESTIVAL_CALENDARS = {
     "gregorian": const.CALENDAR_TYPE.GREGORIAN,
 }
 
+YOGA_DESCRIPTIONS = {
+    "chatussagara_yoga": (
+        "All four Kendra houses (1, 4, 7, 10) are occupied by planets."
+    ),
+}
+
+YOGA_CONFLICTS = (
+    ("kapata_yoga", "nishkapata_yoga"),
+    ("anapathya_yoga", "bahu_puthra_yoga"),
+)
+
 SUNRISE_CONVENTIONS = {
     "hindu": "Hindu rising (disc center, no refraction)",
     "refraction": "Center of disc with refraction",
     "bottom_limb": "Bottom limb with refraction",
 }
+
+NODE_TYPES = {"true": "True node", "mean": "Mean node"}
 
 _AYANAMSA_LOCK = threading.RLock()
 
@@ -189,6 +202,32 @@ def _use_sunrise_convention(mode: str):
                 const.RISE_SET_USE_DISC_CENTER_FOR_RISING,
             ) = saved
             drik.refresh_planet_flags()
+
+
+@contextmanager
+def _use_node_type(node_type: str):
+    key = node_type.strip().lower()
+    if key not in NODE_TYPES:
+        raise ValueError("node_type must be true or mean")
+
+    def sync_planet_list() -> None:
+        # PyJHora caches the node keys in drik.planet_list at import, so
+        # set_node_mode() alone leaves Rahu on the old node.
+        for node_key in list(drik.planet_list):
+            if drik.planet_list[node_key] in (const.RAHU_ID, const.KETU_ID):
+                del drik.planet_list[node_key]
+        drik.planet_list[const._RAHU] = const.RAHU_ID
+        drik.planet_list[const._KETU] = const.KETU_ID
+
+    with _AYANAMSA_LOCK:
+        saved = const._use_true_nodes_for_rahu_ketu
+        const.set_node_mode(key == "true")
+        sync_planet_list()
+        try:
+            yield NODE_TYPES[key]
+        finally:
+            const.set_node_mode(saved)
+            sync_planet_list()
 
 PLANET_NAMES = (
     "Sun",
@@ -584,6 +623,7 @@ def kundli(
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
+    node_type: str = "true",
 ) -> dict[str, Any]:
     """Return the birth chart (D1) for a local date, time and place."""
     day = Date.fromisoformat(date)
@@ -599,7 +639,10 @@ def kundli(
         (birth.hour, birth.minute, birth.second),
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_node_type(node_type) as node_label,
+    ):
         lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = (
             drik.ascendant(jd, place)
         )
@@ -637,6 +680,7 @@ def kundli(
         "system": {
             "ayanamsa": ayanamsa_label,
             "houses": "whole sign from lagna",
+            "node_type": node_label,
         },
         "lagna": {
             "sign": RAASI_NAMES[lagna_rasi],
@@ -657,6 +701,7 @@ def varga(
     location_name: str = DEFAULT_LOCATION,
     division: int = 9,
     ayanamsa: str = "LAHIRI",
+    node_type: str = "true",
 ) -> dict[str, Any]:
     """Return a divisional (varga) chart such as Navamsa D9 or Dasamsa D10."""
     day = Date.fromisoformat(date)
@@ -676,7 +721,10 @@ def varga(
         (birth.hour, birth.minute, birth.second),
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_node_type(node_type) as node_label,
+    ):
         lagna_rasi, lagna_degree, _, _ = drik.ascendant(jd, place)
         varga_lagna_rasi, _ = drik.dasavarga_from_long(
             lagna_rasi * 30 + lagna_degree, division
@@ -733,6 +781,7 @@ def varga(
             "ayanamsa": ayanamsa_label,
             "division": division,
             "varga": VARGA_NAMES[division],
+            "node_type": node_label,
         },
         "lagna": {"sign": RAASI_NAMES[varga_lagna_rasi]},
         "planets": planets,
@@ -748,6 +797,7 @@ def bhava_chalit(
     location_name: str = DEFAULT_LOCATION,
     house_system: str = "sripati",
     ayanamsa: str = "LAHIRI",
+    node_type: str = "true",
 ) -> dict[str, Any]:
     """Return the degree-based bhava chalit chart."""
     day = Date.fromisoformat(date)
@@ -775,7 +825,10 @@ def bhava_chalit(
         (birth.hour, birth.minute, birth.second),
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_node_type(node_type) as node_label,
+    ):
         lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = (
             drik.ascendant(jd, place)
         )
@@ -838,6 +891,7 @@ def bhava_chalit(
         "system": {
             "ayanamsa": ayanamsa_label,
             "house_system": labels[system_key],
+            "node_type": node_label,
         },
         "lagna": {
             "sign": RAASI_NAMES[lagna_rasi],
@@ -1042,7 +1096,7 @@ def matching(
     girl_timezone: str | float | None = None,
     ayanamsa: str = "LAHIRI",
     system: str = "north",
-    vasiya_method: str = "classical",
+    vasya_convention: str = "split",
     latitude: float = DEFAULT_LATITUDE,
     longitude: float = DEFAULT_LONGITUDE,
     location_name: str = DEFAULT_LOCATION,
@@ -1053,8 +1107,8 @@ def matching(
     key = system.strip().lower()
     if key not in ("north", "south"):
         raise ValueError("system must be north or south")
-    if vasiya_method not in ("classical", "whole_sign"):
-        raise ValueError("vasiya_method must be classical or whole_sign")
+    if vasya_convention not in ("split", "whole_sign"):
+        raise ValueError("vasya_convention must be split or whole_sign")
     _check_coordinates(latitude, longitude)
     girl_lat = latitude if girl_latitude is None else girl_latitude
     girl_lon = longitude if girl_longitude is None else girl_longitude
@@ -1120,7 +1174,7 @@ def matching(
         scores = dict(zip(labels, values[:8]))
         tara = _tara_score(ashtakoota)
         gana = _gana_score(ashtakoota)
-        vasiya = _vasiya_score(boy, girl, vasiya_method)
+        vasiya = _vasiya_score(boy, girl, vasya_convention)
         scores["tara"] = tara
         scores["gana"] = gana
         scores["vasiya"] = vasiya
@@ -1144,7 +1198,7 @@ def matching(
             "shree_dheerga": values[12],
         }
         method_label = "North Indian Ashtakoota"
-        extra_system = {"vasiya_method": vasiya_method}
+        extra_system = {"vasya_convention": vasya_convention}
         note = (
             "18/36 is the traditional minimum; this is not a substitute "
             "for a full chart comparison."
@@ -1259,6 +1313,7 @@ def transits(
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
+    node_type: str = "true",
 ) -> dict[str, Any]:
     """Return current transits against the natal lagna and Moon."""
     natal_day = Date.fromisoformat(date)
@@ -1296,7 +1351,10 @@ def transits(
         (target_birth.hour, target_birth.minute, target_birth.second),
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_node_type(node_type) as node_label,
+    ):
         natal_lagna = drik.ascendant(natal_jd, natal_place)
         natal_positions = drik.planetary_positions(natal_jd, natal_place)
         target_positions = drik.planetary_positions(target_jd, target_place)
@@ -1354,7 +1412,7 @@ def transits(
         "location": _location(
             location_name, latitude, longitude, timezone, natal_offset
         ),
-        "system": {"ayanamsa": ayanamsa_label},
+        "system": {"ayanamsa": ayanamsa_label, "node_type": node_label},
         "planets": planets,
         "sade_sati": {
             "active": phase is not None,
@@ -1377,6 +1435,7 @@ def yogas(
     location_name: str = DEFAULT_LOCATION,
     division: int = 1,
     ayanamsa: str = "LAHIRI",
+    node_type: str = "true",
 ) -> dict[str, Any]:
     """Return detected yogas and doshas for a chart."""
     day = Date.fromisoformat(date)
@@ -1396,7 +1455,10 @@ def yogas(
         (birth.hour, birth.minute, birth.second),
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_node_type(node_type) as node_label,
+    ):
         with redirect_stdout(io.StringIO()):
             yoga_results, count, total = yoga.get_yoga_details(
                 jd, place, divisional_chart_factor=division
@@ -1408,7 +1470,7 @@ def yogas(
             "key": key,
             "chart": details[0],
             "name": details[1],
-            "description": details[2],
+            "description": YOGA_DESCRIPTIONS.get(key, details[2]),
             "effects": details[3],
         }
         for key, details in yoga_results.items()
@@ -1416,6 +1478,34 @@ def yogas(
     dosha_list = {
         key: _clean_html(value) for key, value in dosha_results.items()
     }
+    conflicts = []
+    for first, second in YOGA_CONFLICTS:
+        first_match = next(
+            (
+                item
+                for item in yoga_list
+                if item["key"] == first or item["key"].startswith(f"{first}_")
+            ),
+            None,
+        )
+        second_match = next(
+            (
+                item
+                for item in yoga_list
+                if item["key"] == second or item["key"].startswith(f"{second}_")
+            ),
+            None,
+        )
+        if first_match and second_match:
+            conflicts.append(
+                {
+                    "yogas": [first_match["name"], second_match["name"]],
+                    "note": (
+                        "These rules describe opposite conditions; judge "
+                        "which one dominates in the chart."
+                    ),
+                }
+            )
 
     tz = fixed_timezone(timedelta(hours=offset))
     return {
@@ -1429,9 +1519,11 @@ def yogas(
             "varga": VARGA_NAMES[division],
             "yogas_found": count,
             "yoga_rules_checked": total,
+            "node_type": node_label,
         },
         "yogas": yoga_list,
         "doshas": dosha_list,
+        "conflicts": conflicts,
         "note": (
             "Classical rule matches; many yogas cancel or modify each other. "
             "This is not a final judgment."

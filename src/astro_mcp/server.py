@@ -38,6 +38,10 @@ Ayanamsa = Annotated[
         )
     ),
 ]
+NodeType = Annotated[
+    str,
+    Field(description="Rahu/Ketu node: true (default) or mean."),
+]
 SunriseConvention = Annotated[
     str,
     Field(
@@ -56,11 +60,11 @@ AsOfTimezone = Annotated[
         )
     ),
 ]
-VasiyaMethod = Annotated[
+VasyaConvention = Annotated[
     str,
     Field(
         description=(
-            "Vasiya table for North Indian matching: classical (default, "
+            "Vasya table for North Indian matching: split (default, "
             "Sagittarius and Capricorn split at 15 degrees) or whole_sign "
             "(all Sagittarius Manava, all Capricorn Jalachara)."
         )
@@ -87,7 +91,7 @@ FestivalCalendar = Annotated[
 
 server = MCPServer(
     "astro-mcp",
-    version="0.5.2",
+    version="0.6.0",
     instructions=(
         "Vedic astrology using Drik ganita and a selectable ayanamsa "
         "(Lahiri by default). Panchang, kundli, varga charts, bhava "
@@ -164,6 +168,7 @@ def get_kundli(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    node_type: NodeType = "true",
 ) -> dict[str, Any]:
     """Return the D1 birth chart for a local date, time and place.
 
@@ -178,6 +183,7 @@ def get_kundli(
         timezone=timezone,
         location_name=location_name,
         ayanamsa=ayanamsa,
+        node_type=node_type,
     )
 
 
@@ -279,6 +285,7 @@ def get_varga(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    node_type: NodeType = "true",
 ) -> dict[str, Any]:
     """Return a divisional (varga) chart such as Navamsa D9 or Dasamsa D10.
 
@@ -293,6 +300,7 @@ def get_varga(
         location_name=location_name,
         division=division,
         ayanamsa=ayanamsa,
+        node_type=node_type,
     )
 
 
@@ -329,6 +337,7 @@ def get_bhava_chalit(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    node_type: NodeType = "true",
 ) -> dict[str, Any]:
     """Return the degree-based bhava chalit chart.
 
@@ -343,6 +352,7 @@ def get_bhava_chalit(
         location_name=location_name,
         house_system=house_system,
         ayanamsa=ayanamsa,
+        node_type=node_type,
     )
 
 
@@ -379,6 +389,7 @@ def get_transits(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    node_type: NodeType = "true",
 ) -> dict[str, Any]:
     """Return current transits against the natal lagna and Moon.
 
@@ -396,6 +407,7 @@ def get_transits(
         timezone=timezone,
         location_name=location_name,
         ayanamsa=ayanamsa,
+        node_type=node_type,
     )
 
 
@@ -428,6 +440,7 @@ def get_yogas(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    node_type: NodeType = "true",
 ) -> dict[str, Any]:
     """Return classical yogas and doshas detected in a chart.
 
@@ -443,6 +456,7 @@ def get_yogas(
         location_name=location_name,
         division=division,
         ayanamsa=ayanamsa,
+        node_type=node_type,
     )
 
 
@@ -654,7 +668,7 @@ def get_matching(
             )
         ),
     ] = "north",
-    vasiya_method: VasiyaMethod = "classical",
+    vasya_convention: VasyaConvention = "split",
     latitude: Annotated[
         float, Field(description="Boy's latitude in degrees; north is positive.")
     ] = DEFAULT_LATITUDE,
@@ -678,7 +692,7 @@ def get_matching(
     North Indian Ashtakoota scores out of 36; South Indian Porutham checks
     10 poruthams with a 6/10 minimum. Manglik is computed from Mars' house
     from the lagna with BV Raman exceptions applied. Vasiya can use the
-    classical half-sign split or the whole-sign convention.
+    split half-sign convention or the whole-sign convention.
     """
     return matching(
         boy_date=boy_date,
@@ -689,7 +703,7 @@ def get_matching(
         girl_timezone=girl_timezone,
         ayanamsa=ayanamsa,
         system=system,
-        vasiya_method=vasiya_method,
+        vasya_convention=vasya_convention,
         latitude=latitude,
         longitude=longitude,
         location_name=location_name,
