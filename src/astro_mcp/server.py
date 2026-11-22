@@ -101,7 +101,10 @@ FestivalCalendar = Annotated[
     ),
 ]
 
-CLAIM_TOKEN = os.environ.get("MCPRUSH_CLAIM_TOKEN")
+# Temporary MCPRush claim token. Remove after MCPRush verifies the listing.
+CLAIM_TOKEN = os.environ.get(
+    "MCPRUSH_CLAIM_TOKEN", "mcprush.com-ca972871518ecfd7722181d6"
+)
 INSTRUCTIONS = (
     "Vedic astrology using Drik ganita by default, with a selectable "
     "ayanamsa and a selectable traditional planet model (Surya "
