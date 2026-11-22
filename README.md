@@ -26,7 +26,11 @@ An MCP server for Vedic astrology and panchang calculations, powered by
 - Location: Varanasi (25.3176 N, 82.9739 E), `Asia/Kolkata`
 - Ayanamsa: Lahiri / Chitrapaksha, selectable per request (`RAMAN`, `KP`,
   `TRUE_CHITRA`, `TRUE_PUSHYA`, `YUKTESHWAR`, `FAGAN`, `SURYA_SIDDHANTA`, ...)
-- Panchang: Drik ganita, sunrise-based day
+- Planet model: Drik (default), Surya Siddhanta, Graha Laghava, Khanda
+  Khadyaka, Tantra Sangraha, Vakya Panchanga or Makaranda. Traditional
+  models use their own ayanamsa and sunrise; validate their degrees against
+  your own panchang before relying on them.
+- Panchang: sunrise-based day
 - Sunrise: Hindu rising by default; optionally refraction or bottom limb
 - Houses: whole sign for D1; Sripati, KP/Placidus or equal for bhava chalit
 - Dasha: Vimshottari, Yogini and Chara, running chain to any depth from maha to deha
@@ -42,7 +46,11 @@ chart tools (`get_panchang`, `get_kundli`, `get_varga`, `get_bhava_chalit`,
 `get_dashas`, `get_yogini_dashas`, `get_chara_dashas`, `get_transits`,
 `get_yogas` and `get_strength`) also accept `ayanamsa`. The chart tools
 (`get_kundli`, `get_varga`, `get_bhava_chalit`, `get_transits` and `get_yogas`)
-also accept `node_type` (`true` by default, or `mean`). `get_matching` takes
+also accept `node_type` (`true` by default, or `mean`). The chart and dasha
+tools also accept `planet_model` (`drik` by default, or `surya_siddhanta`,
+`graha_laghava`, `khanda_khaadyaka`, `tantra_sangraha`, `vakya_panchanga`,
+`makaranda`). A traditional model uses its own ayanamsa, so `system.ayanamsa`
+reads `Model default` for those. `get_matching` takes
 two birth times
 and a timezone; coordinates are only needed for the Manglik and D9 checks, and
 `girl_latitude`/`girl_longitude` cover a girl born elsewhere. `system` selects
@@ -125,6 +133,17 @@ Point any MCP client at the installed executable:
 
 ```json
 {"date": "1990-01-01", "time": "12:00"}
+```
+
+`get_kundli` with a traditional planet model (Sonali's chart, Saturn moves
+from Aquarius to Capricorn):
+
+```json
+{
+  "date": "1993-09-22", "time": "05:36",
+  "latitude": 24.4419, "longitude": 82.9817,
+  "planet_model": "surya_siddhanta"
+}
 ```
 
 `get_varga` (D9 by default):

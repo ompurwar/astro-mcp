@@ -13,7 +13,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from jhora import const, utils
-from jhora.panchanga import drik
+
+# Resolve through PyJHora's engine proxy so a planet model can be selected
+# per request without changing every call site.
+drik = utils.hora_engine_proxy
 
 # PyJHora prints its sys.path edits on import; silence them so stdio stays clean.
 with redirect_stdout(io.StringIO()):
@@ -161,11 +164,42 @@ SUNRISE_CONVENTIONS = {
 
 NODE_TYPES = {"true": "True node", "mean": "Mean node"}
 
+PLANET_MODELS = {
+    "drik": (const.ASTROLOGY_MODELS.DRIK, "Drik"),
+    "surya_siddhanta": (
+        const.ASTROLOGY_MODELS.SURYA_SIDDHANTHA,
+        "Surya Siddhanta",
+    ),
+    "graha_laghava": (
+        const.ASTROLOGY_MODELS.GRAHA_LAAGHAVAM,
+        "Graha Laghava",
+    ),
+    "khanda_khaadyaka": (
+        const.ASTROLOGY_MODELS.KHANDA_KHAADYAKA,
+        "Khanda Khadyaka",
+    ),
+    "tantra_sangraha": (
+        const.ASTROLOGY_MODELS.TANTRA_SANGRAHA,
+        "Tantra Sangraha",
+    ),
+    "vakya_panchanga": (
+        const.ASTROLOGY_MODELS.VAKYA_PANCHANGAM,
+        "Vakya Panchanga",
+    ),
+    "makaranda": (
+        const.ASTROLOGY_MODELS.MAKARANDA_SARINI,
+        "Makaranda Sarini",
+    ),
+}
+
 _AYANAMSA_LOCK = threading.RLock()
 
 
 @contextmanager
-def _use_ayanamsa(mode: str):
+def _use_ayanamsa(mode: str, planet_model: str = "drik"):
+    if planet_model.strip().lower() != "drik":
+        yield "Model default"
+        return
     raw = mode.strip().upper()
     key = AYANAMSA_ALIASES.get(raw, raw)
     if key not in AYANAMSA_MODES:
@@ -175,6 +209,23 @@ def _use_ayanamsa(mode: str):
     with _AYANAMSA_LOCK:
         drik.set_ayanamsa_mode(key)
         yield AYANAMSA_MODES[key]
+
+
+@contextmanager
+def _use_planet_model(model: str):
+    key = model.strip().lower()
+    if key not in PLANET_MODELS:
+        raise ValueError(
+            f"Unknown planet_model: {model}. Supported: "
+            f"{', '.join(PLANET_MODELS)}"
+        )
+    with _AYANAMSA_LOCK:
+        saved = const.astrology_model_default
+        const.astrology_model_default = PLANET_MODELS[key][0]
+        try:
+            yield PLANET_MODELS[key][1]
+        finally:
+            const.astrology_model_default = saved
 
 
 @contextmanager
@@ -632,6 +683,7 @@ def _manglik_status(
     longitude: float,
     location_name: str,
     ayanamsa: str,
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     day = Date.fromisoformat(date)
     birth = _birth_datetime(date, time)
@@ -641,7 +693,10 @@ def _manglik_status(
         (birth.year, birth.month, birth.day),
         (birth.hour, birth.minute, birth.second),
     )
-    with _use_ayanamsa(ayanamsa):
+    with (
+        _use_planet_model(planet_model),
+        _use_ayanamsa(ayanamsa, planet_model),
+    ):
         positions = charts.rasi_chart(jd, place)
         manglik, exceptions, indices = dosha.manglik(positions)
     return {
@@ -661,6 +716,7 @@ def _navamsa_summary(
     longitude: float,
     location_name: str,
     ayanamsa: str,
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     day = Date.fromisoformat(date)
     birth = _birth_datetime(date, time)
@@ -670,7 +726,10 @@ def _navamsa_summary(
         (birth.year, birth.month, birth.day),
         (birth.hour, birth.minute, birth.second),
     )
-    with _use_ayanamsa(ayanamsa):
+    with (
+        _use_planet_model(planet_model),
+        _use_ayanamsa(ayanamsa, planet_model),
+    ):
         positions = charts.divisional_chart(
             jd, place, divisional_chart_factor=9
         )
@@ -746,6 +805,7 @@ def panchang(
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
     sunrise_convention: str = "hindu",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return the five limbs of the panchang at sunrise for a date and place."""
     day = Date.fromisoformat(date)
@@ -756,7 +816,8 @@ def panchang(
     jd = utils.julian_day_number((day.year, day.month, day.day), (12, 0, 0))
 
     with (
-        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
         _use_sunrise_convention(sunrise_convention) as sunrise_label,
     ):
         sunrise = drik.sunrise(jd, place)
@@ -779,7 +840,8 @@ def panchang(
             location_name, latitude, longitude, timezone, offset
         ),
         "system": {
-            "panchanga": "Drik",
+            "panchanga": "Drik" if model_label == "Drik" else model_label,
+            "planet_model": model_label,
             "ayanamsa": ayanamsa_label,
             "day_starts": "sunrise",
             "sunrise_convention": sunrise_label,
@@ -859,6 +921,7 @@ def kundli(
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
     node_type: str = "true",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return the birth chart (D1) for a local date, time and place."""
     day = Date.fromisoformat(date)
@@ -875,7 +938,8 @@ def kundli(
     )
 
     with (
-        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
         _use_node_type(node_type) as node_label,
     ):
         lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = (
@@ -914,6 +978,7 @@ def kundli(
         ),
         "system": {
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "houses": "whole sign from lagna",
             "node_type": node_label,
         },
@@ -937,6 +1002,7 @@ def varga(
     division: int = 9,
     ayanamsa: str = "LAHIRI",
     node_type: str = "true",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return a divisional (varga) chart such as Navamsa D9 or Dasamsa D10."""
     day = Date.fromisoformat(date)
@@ -957,7 +1023,8 @@ def varga(
     )
 
     with (
-        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
         _use_node_type(node_type) as node_label,
     ):
         retrograde = set(drik.planets_in_retrograde(jd, place))
@@ -1021,6 +1088,7 @@ def varga(
         ),
         "system": {
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "division": division,
             "varga": VARGA_NAMES[division],
             "node_type": node_label,
@@ -1040,6 +1108,7 @@ def bhava_chalit(
     house_system: str = "sripati",
     ayanamsa: str = "LAHIRI",
     node_type: str = "true",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return the degree-based bhava chalit chart."""
     day = Date.fromisoformat(date)
@@ -1068,7 +1137,8 @@ def bhava_chalit(
     )
 
     with (
-        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
         _use_node_type(node_type) as node_label,
     ):
         lagna_rasi, lagna_degree, lagna_nakshatra, lagna_pada = (
@@ -1132,6 +1202,7 @@ def bhava_chalit(
         ),
         "system": {
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "house_system": labels[system_key],
             "node_type": node_label,
         },
@@ -1172,6 +1243,7 @@ def dashas(
     as_of_timezone: str | float | None = None,
     depth: int = 2,
     ayanamsa: str = "LAHIRI",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return the Vimshottari mahadasha timeline and running periods."""
     day = Date.fromisoformat(date)
@@ -1196,7 +1268,10 @@ def dashas(
         (as_of_day.year, as_of_day.month, as_of_day.day), (12, 0, 0)
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
+    ):
         balance, rows = vimsottari.get_dhasa_antardhasa(
             dob,
             tob,
@@ -1231,6 +1306,7 @@ def dashas(
         "system": {
             "dasha": "Vimshottari",
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "depth": depth,
         },
         "balance_at_birth": {
@@ -1304,21 +1380,36 @@ def muhurta(
 
 
 def _moon_details(
-    date: str, time: str, timezone: str | float, ayanamsa: str
+    date: str,
+    time: str,
+    timezone: str | float,
+    latitude: float,
+    longitude: float,
+    location_name: str,
+    ayanamsa: str,
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     day = Date.fromisoformat(date)
     birth = _birth_datetime(date, time)
     offset = _offset_hours(
         timezone, day, birth.hour + birth.minute / 60
     )
+    place = drik.Place(location_name, latitude, longitude, offset)
     jd = utils.julian_day_number(
         (birth.year, birth.month, birth.day),
         (birth.hour, birth.minute, birth.second),
     )
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
-        moon_longitude = drik.sidereal_longitude(
-            jd - offset / 24, const._MOON
+    with (
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
+    ):
+        positions = charts.rasi_chart(jd, place)
+        moon_rasi, moon_degree = next(
+            (rasi, degree)
+            for planet_id, (rasi, degree) in positions
+            if planet_id == 1
         )
+        moon_longitude = moon_rasi * 30 + moon_degree
         nakshatra, pada, _ = drik.nakshatra_pada(moon_longitude)
     tz = fixed_timezone(timedelta(hours=offset))
     return {
@@ -1326,6 +1417,7 @@ def _moon_details(
         "number": nakshatra,
         **_base_position(moon_longitude),
         "ayanamsa": ayanamsa_label,
+        "planet_model": model_label,
     }
 
 
@@ -1339,6 +1431,7 @@ def matching(
     ayanamsa: str = "LAHIRI",
     system: str = "north",
     vasya_convention: str = "split",
+    planet_model: str = "drik",
     latitude: float = DEFAULT_LATITUDE,
     longitude: float = DEFAULT_LONGITUDE,
     location_name: str = DEFAULT_LOCATION,
@@ -1357,8 +1450,26 @@ def matching(
     _check_coordinates(girl_lat, girl_lon)
 
     girl_tz = girl_timezone if girl_timezone is not None else timezone
-    boy = _moon_details(boy_date, boy_time, timezone, ayanamsa)
-    girl = _moon_details(girl_date, girl_time, girl_tz, ayanamsa)
+    boy = _moon_details(
+        boy_date,
+        boy_time,
+        timezone,
+        latitude,
+        longitude,
+        location_name,
+        ayanamsa,
+        planet_model,
+    )
+    girl = _moon_details(
+        girl_date,
+        girl_time,
+        girl_tz,
+        girl_lat,
+        girl_lon,
+        location_name,
+        ayanamsa,
+        planet_model,
+    )
 
     ashtakoota = Ashtakoota(
         boy["number"],
@@ -1455,6 +1566,7 @@ def matching(
             longitude,
             location_name,
             ayanamsa,
+            planet_model,
         ),
         "girl": _manglik_status(
             girl_date,
@@ -1464,6 +1576,7 @@ def matching(
             girl_lon,
             location_name,
             ayanamsa,
+            planet_model,
         ),
         "note": (
             "Mars from the lagna with BV Raman exceptions applied; the "
@@ -1479,6 +1592,7 @@ def matching(
         longitude,
         location_name,
         ayanamsa,
+        planet_model,
     )
     girl_navamsa = _navamsa_summary(
         girl_date,
@@ -1488,6 +1602,7 @@ def matching(
         girl_lon,
         location_name,
         ayanamsa,
+        planet_model,
     )
     boy_lord = PLANET_NAMES.index(boy_navamsa["lagna_lord"])
     girl_lord = PLANET_NAMES.index(girl_navamsa["lagna_lord"])
@@ -1537,6 +1652,7 @@ def matching(
         "navamsa": navamsa,
         "system": {
             "ayanamsa": boy["ayanamsa"],
+            "planet_model": boy["planet_model"],
             "method": method_label,
             **extra_system,
         },
@@ -1556,6 +1672,7 @@ def transits(
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
     node_type: str = "true",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return current transits against the natal lagna and Moon."""
     natal_day = Date.fromisoformat(date)
@@ -1594,7 +1711,8 @@ def transits(
     )
 
     with (
-        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
         _use_node_type(node_type) as node_label,
     ):
         natal_lagna = drik.ascendant(natal_jd, natal_place)
@@ -1654,7 +1772,11 @@ def transits(
         "location": _location(
             location_name, latitude, longitude, timezone, natal_offset
         ),
-        "system": {"ayanamsa": ayanamsa_label, "node_type": node_label},
+        "system": {
+            "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
+            "node_type": node_label,
+        },
         "planets": planets,
         "sade_sati": {
             "active": phase is not None,
@@ -1678,6 +1800,7 @@ def yogas(
     division: int = 1,
     ayanamsa: str = "LAHIRI",
     node_type: str = "true",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return detected yogas and doshas for a chart."""
     day = Date.fromisoformat(date)
@@ -1698,7 +1821,8 @@ def yogas(
     )
 
     with (
-        _use_ayanamsa(ayanamsa) as ayanamsa_label,
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
         _use_node_type(node_type) as node_label,
     ):
         with redirect_stdout(io.StringIO()):
@@ -1766,6 +1890,7 @@ def yogas(
         ),
         "system": {
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "division": division,
             "varga": VARGA_NAMES[division],
             "yogas_found": len(yoga_list),
@@ -1799,6 +1924,7 @@ def yogini_dashas(
     as_of_timezone: str | float | None = None,
     depth: int = 2,
     ayanamsa: str = "LAHIRI",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return the Yogini dasha timeline and running periods."""
     day = Date.fromisoformat(date)
@@ -1822,7 +1948,10 @@ def yogini_dashas(
         (as_of_day.year, as_of_day.month, as_of_day.day), (12, 0, 0)
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
+    ):
         rows = yogini.get_dhasa_antardhasa(
             dob,
             tob,
@@ -1866,6 +1995,7 @@ def yogini_dashas(
         "system": {
             "dasha": "Yogini",
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "depth": depth,
         },
         "mahadashas": mahadashas,
@@ -1889,6 +2019,7 @@ def chara_dashas(
     depth: int = 2,
     method: str = "kn_rao",
     ayanamsa: str = "LAHIRI",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return the Chara (Jaimini rasi) dasha timeline and running periods."""
     day = Date.fromisoformat(date)
@@ -1915,7 +2046,10 @@ def chara_dashas(
     )
     method_value, method_label = CHARA_METHODS[key]
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
+    ):
         rows = chara.get_dhasa_antardhasa(
             dob,
             tob,
@@ -1963,6 +2097,7 @@ def chara_dashas(
             "dasha": "Chara",
             "method": method_label,
             "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
             "depth": depth,
         },
         "mahadashas": mahadashas,
@@ -2072,6 +2207,7 @@ def strength_report(
     timezone: str | float = DEFAULT_TIMEZONE,
     location_name: str = DEFAULT_LOCATION,
     ayanamsa: str = "LAHIRI",
+    planet_model: str = "drik",
 ) -> dict[str, Any]:
     """Return Shadbala and Ashtakavarga bindus."""
     day = Date.fromisoformat(date)
@@ -2087,7 +2223,10 @@ def strength_report(
         (birth.hour, birth.minute, birth.second),
     )
 
-    with _use_ayanamsa(ayanamsa) as ayanamsa_label:
+    with (
+        _use_planet_model(planet_model) as model_label,
+        _use_ayanamsa(ayanamsa, planet_model) as ayanamsa_label,
+    ):
         shad = strength.shad_bala(jd, place)
         lagna = drik.ascendant(jd, place)
         positions = drik.planetary_positions(jd, place)
@@ -2114,7 +2253,10 @@ def strength_report(
         "location": _location(
             location_name, latitude, longitude, timezone, offset
         ),
-        "system": {"ayanamsa": ayanamsa_label},
+        "system": {
+            "ayanamsa": ayanamsa_label,
+            "planet_model": model_label,
+        },
         "shadbala": {
             "planets": planets,
             "components": components,

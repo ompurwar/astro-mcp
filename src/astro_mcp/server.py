@@ -34,13 +34,25 @@ Ayanamsa = Annotated[
     Field(
         description=(
             "Ayanamsa mode: LAHIRI (default), RAMAN, KP, TRUE_CHITRA, "
-            "TRUE_PUSHYA, YUKTESHWAR, FAGAN or SURYA_SIDDHANTA."
+            "TRUE_PUSHYA, YUKTESHWAR, FAGAN or SURYA_SIDDHANTA. Used with "
+            "planet_model=drik; traditional planet models use their own "
+            "ayanamsa."
         )
     ),
 ]
 NodeType = Annotated[
     str,
     Field(description="Rahu/Ketu node: true (default) or mean."),
+]
+PlanetModel = Annotated[
+    str,
+    Field(
+        description=(
+            "Planetary model: drik (default), surya_siddhanta, "
+            "graha_laghava, khanda_khaadyaka, tantra_sangraha, "
+            "vakya_panchanga or makaranda."
+        )
+    ),
 ]
 SunriseConvention = Annotated[
     str,
@@ -91,10 +103,11 @@ FestivalCalendar = Annotated[
 
 server = MCPServer(
     "astro-mcp",
-    version="0.7.1",
+    version="0.8.0",
     instructions=(
-        "Vedic astrology using Drik ganita and a selectable ayanamsa "
-        "(Lahiri by default). Panchang, kundli, varga charts, bhava "
+        "Vedic astrology using Drik ganita by default, with a selectable "
+        "ayanamsa and a selectable traditional planet model (Surya "
+        "Siddhanta, Graha Laghava and others). Panchang, kundli, varga charts, bhava "
         "chalit, Vimshottari, Yogini and Chara dashas, transits with Sade "
         "Sati, yogas and doshas, Shadbala and Ashtakavarga, North and South "
         "Indian guna milan with Manglik and D9 comparison, muhurta and "
@@ -126,6 +139,7 @@ def get_panchang(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
     sunrise_convention: SunriseConvention = "hindu",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return sunrise, sunset, tithi, nakshatra, yoga, karana and vara for a date.
 
@@ -140,6 +154,7 @@ def get_panchang(
         location_name=location_name,
         ayanamsa=ayanamsa,
         sunrise_convention=sunrise_convention,
+        planet_model=planet_model,
     )
 
 
@@ -169,6 +184,7 @@ def get_kundli(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
     node_type: NodeType = "true",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return the D1 birth chart for a local date, time and place.
 
@@ -184,6 +200,7 @@ def get_kundli(
         location_name=location_name,
         ayanamsa=ayanamsa,
         node_type=node_type,
+        planet_model=planet_model,
     )
 
 
@@ -231,6 +248,7 @@ def get_dashas(
         ),
     ] = 2,
     ayanamsa: Ayanamsa = "LAHIRI",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return the Vimshottari mahadasha timeline and the running periods.
 
@@ -248,6 +266,7 @@ def get_dashas(
         as_of_timezone=as_of_timezone,
         depth=depth,
         ayanamsa=ayanamsa,
+        planet_model=planet_model,
     )
 
 
@@ -286,6 +305,7 @@ def get_varga(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
     node_type: NodeType = "true",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return a divisional (varga) chart such as Navamsa D9 or Dasamsa D10.
 
@@ -301,6 +321,7 @@ def get_varga(
         division=division,
         ayanamsa=ayanamsa,
         node_type=node_type,
+        planet_model=planet_model,
     )
 
 
@@ -338,6 +359,7 @@ def get_bhava_chalit(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
     node_type: NodeType = "true",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return the degree-based bhava chalit chart.
 
@@ -353,6 +375,7 @@ def get_bhava_chalit(
         house_system=house_system,
         ayanamsa=ayanamsa,
         node_type=node_type,
+        planet_model=planet_model,
     )
 
 
@@ -390,6 +413,7 @@ def get_transits(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
     node_type: NodeType = "true",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return current transits against the natal lagna and Moon.
 
@@ -408,6 +432,7 @@ def get_transits(
         location_name=location_name,
         ayanamsa=ayanamsa,
         node_type=node_type,
+        planet_model=planet_model,
     )
 
 
@@ -441,6 +466,7 @@ def get_yogas(
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
     node_type: NodeType = "true",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return classical yogas and doshas detected in a chart.
 
@@ -458,6 +484,7 @@ def get_yogas(
         division=division,
         ayanamsa=ayanamsa,
         node_type=node_type,
+        planet_model=planet_model,
     )
 
 
@@ -505,6 +532,7 @@ def get_yogini_dashas(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return the Yogini dasha timeline and running periods.
 
@@ -521,6 +549,7 @@ def get_yogini_dashas(
         as_of_timezone=as_of_timezone,
         depth=depth,
         ayanamsa=ayanamsa,
+        planet_model=planet_model,
     )
 
 
@@ -569,6 +598,7 @@ def get_chara_dashas(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return the Chara (Jaimini rasi) dasha timeline and running periods.
 
@@ -587,6 +617,7 @@ def get_chara_dashas(
         depth=depth,
         method=method,
         ayanamsa=ayanamsa,
+        planet_model=planet_model,
     )
 
 
@@ -615,6 +646,7 @@ def get_strength(
         str, Field(description="Display name for the location.")
     ] = DEFAULT_LOCATION,
     ayanamsa: Ayanamsa = "LAHIRI",
+    planet_model: PlanetModel = "drik",
 ) -> dict[str, Any]:
     """Return Shadbala and Ashtakavarga bindus.
 
@@ -629,6 +661,7 @@ def get_strength(
         timezone=timezone,
         location_name=location_name,
         ayanamsa=ayanamsa,
+        planet_model=planet_model,
     )
 
 
@@ -660,6 +693,7 @@ def get_matching(
         Field(description="Girl's timezone, if different from the boy's."),
     ] = None,
     ayanamsa: Ayanamsa = "LAHIRI",
+    planet_model: PlanetModel = "drik",
     system: Annotated[
         str,
         Field(
@@ -703,6 +737,7 @@ def get_matching(
         timezone=timezone,
         girl_timezone=girl_timezone,
         ayanamsa=ayanamsa,
+        planet_model=planet_model,
         system=system,
         vasya_convention=vasya_convention,
         latitude=latitude,

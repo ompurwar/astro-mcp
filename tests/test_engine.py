@@ -602,6 +602,55 @@ def test_kundli_mean_and_true_nodes():
     assert mean_rahu["degree"] == 22.52
 
 
+def test_traditional_planet_models_put_saturn_in_capricorn():
+    args = {
+        "date": "1993-09-22",
+        "time": "05:36",
+        "latitude": 24.4419,
+        "longitude": 82.9817,
+        "location_name": "Obra",
+    }
+    drik = kundli(**args)
+    surya = kundli(**args, planet_model="surya_siddhanta")
+    laghava = kundli(**args, planet_model="graha_laghava")
+
+    drik_saturn = next(p for p in drik["planets"] if p["name"] == "Saturn")
+    surya_saturn = next(p for p in surya["planets"] if p["name"] == "Saturn")
+    laghava_saturn = next(p for p in laghava["planets"] if p["name"] == "Saturn")
+
+    assert drik_saturn["sign"] == "Aquarius"
+    assert drik_saturn["house"] == 6
+    assert surya["system"]["planet_model"] == "Surya Siddhanta"
+    assert surya_saturn["sign"] == "Capricorn"
+    assert surya_saturn["house"] == 5
+    assert laghava["system"]["planet_model"] == "Graha Laghava"
+    assert laghava_saturn["sign"] == "Capricorn"
+    assert laghava_saturn["house"] == 5
+
+
+def test_dashas_follow_the_planet_model():
+    args = {
+        "date": "1993-09-22",
+        "time": "05:36",
+        "latitude": 24.4419,
+        "longitude": 82.9817,
+        "location_name": "Obra",
+        "as_of": "2026-11-22",
+    }
+    drik = dashas(**args)
+    surya = dashas(**args, planet_model="surya_siddhanta")
+
+    assert surya["system"]["planet_model"] == "Surya Siddhanta"
+    assert surya["balance_at_birth"] != drik["balance_at_birth"]
+
+
+def test_panchang_planet_model_label():
+    result = panchang("2026-11-22", planet_model="surya_siddhanta")
+
+    assert result["system"]["planet_model"] == "Surya Siddhanta"
+    assert result["system"]["ayanamsa"] == "Model default"
+
+
 def test_import_keeps_stdout_clean():
     src = str(Path(__file__).resolve().parents[1] / "src")
     result = subprocess.run(

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "astro-mcp"
-version = "0.7.1"
+version = "0.8.0"
 description = "Vedic panchang and jyotish tools exposed over MCP"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
