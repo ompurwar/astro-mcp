@@ -91,7 +91,7 @@ FestivalCalendar = Annotated[
 
 server = MCPServer(
     "astro-mcp",
-    version="0.7.0",
+    version="0.7.1",
     instructions=(
         "Vedic astrology using Drik ganita and a selectable ayanamsa "
         "(Lahiri by default). Panchang, kundli, varga charts, bhava "

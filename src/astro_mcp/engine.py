@@ -671,13 +671,10 @@ def _navamsa_summary(
         (birth.hour, birth.minute, birth.second),
     )
     with _use_ayanamsa(ayanamsa):
-        lagna_rasi, lagna_degree, _, _ = drik.ascendant(jd, place)
-        d9_lagna, _ = drik.dasavarga_from_long(
-            lagna_rasi * 30 + lagna_degree, 9
-        )
-        positions = drik.dhasavarga(
+        positions = charts.divisional_chart(
             jd, place, divisional_chart_factor=9
         )
+    d9_lagna = next(rasi for pid, (rasi, _) in positions if pid == "L")
     moon_rasi = next(rasi for pid, (rasi, _) in positions if pid == 1)
     venus_rasi = next(rasi for pid, (rasi, _) in positions if pid == 5)
     return {
@@ -963,15 +960,19 @@ def varga(
         _use_ayanamsa(ayanamsa) as ayanamsa_label,
         _use_node_type(node_type) as node_label,
     ):
-        lagna_rasi, lagna_degree, _, _ = drik.ascendant(jd, place)
-        varga_lagna_rasi, _ = drik.dasavarga_from_long(
-            lagna_rasi * 30 + lagna_degree, division
-        )
         retrograde = set(drik.planets_in_retrograde(jd, place))
         d1_positions = drik.planetary_positions(jd, place)
-        positions = drik.dhasavarga(
+        positions = charts.divisional_chart(
             jd, place, divisional_chart_factor=division
         )
+    varga_lagna_rasi = next(
+        rasi for pid, (rasi, _) in positions if pid == "L"
+    )
+    planets_positions = [
+        (planet_id, (rasi, degree))
+        for planet_id, (rasi, degree) in positions
+        if isinstance(planet_id, int)
+    ]
 
     d1_longitudes = {
         planet_id: rasi * 30 + degree
@@ -980,7 +981,10 @@ def varga(
     sun_full = d1_longitudes[0]
     varga_chart = utils.get_house_planet_list_from_planet_positions(
         [["L", (varga_lagna_rasi, 0.0)]]
-        + [[planet_id, (rasi, 0.0)] for planet_id, (rasi, _) in positions]
+        + [
+            [planet_id, (rasi, 0.0)]
+            for planet_id, (rasi, _) in planets_positions
+        ]
     )
     aspects = {
         planet_id: [
@@ -989,7 +993,7 @@ def varga(
                 set(house.aspected_planets_of_the_planet(varga_chart, planet_id))
             )
         ]
-        for planet_id, _ in positions
+        for planet_id, _ in planets_positions
     }
     planets = [
         {
@@ -1006,7 +1010,7 @@ def varga(
             "aspects": aspects[planet_id],
             "friendship": _friendship(planet_id),
         }
-        for planet_id, (rasi, _) in positions
+        for planet_id, (rasi, _) in planets_positions
     ]
 
     tz = fixed_timezone(timedelta(hours=offset))

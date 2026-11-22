@@ -8,6 +8,7 @@ import pytest
 
 from astro_mcp.engine import (
     PLANET_NAMES,
+    RAASI_NAMES,
     bhava_chalit,
     chara_dashas,
     dashas,
@@ -134,11 +135,45 @@ def test_varga_navamsa_and_dasamsa():
 
     dasamsa = varga("1990-01-01", "12:00", division=10)
     assert dasamsa["system"]["varga"] == "Dasamsa"
-    assert dasamsa["lagna"]["sign"] == "Capricorn"
+    assert dasamsa["lagna"]["sign"] == "Gemini"
     planets = {planet["name"]: planet for planet in dasamsa["planets"]}
     assert planets["Sun"]["sign"] == "Taurus"
-    assert planets["Moon"]["sign"] == "Libra"
-    assert planets["Mars"]["sign"] == "Cancer"
+    assert planets["Moon"]["sign"] == "Aries"
+    assert planets["Mars"]["sign"] == "Sagittarius"
+
+
+def test_varga_d10_nodes_are_opposite():
+    result = varga(
+        "1995-05-12",
+        "07:00",
+        latitude=24.4419,
+        longitude=82.9817,
+        location_name="Obra",
+        division=10,
+    )
+    planets = {planet["name"]: planet for planet in result["planets"]}
+
+    assert result["lagna"]["sign"] == "Leo"
+    assert planets["Rahu"]["sign"] == "Capricorn"
+    assert planets["Ketu"]["sign"] == "Cancer"
+    assert planets["Rahu"]["house"] == 6
+    assert planets["Ketu"]["house"] == 12
+
+
+def test_cyclic_vargas_keep_nodes_opposite():
+    for division in (1, 3, 4, 7, 9, 10, 11, 12, 27, 60):
+        result = varga(
+            "1995-05-12",
+            "07:00",
+            latitude=24.4419,
+            longitude=82.9817,
+            location_name="Obra",
+            division=division,
+        )
+        planets = {planet["name"]: planet for planet in result["planets"]}
+        rahu = RAASI_NAMES.index(planets["Rahu"]["sign"])
+        ketu = RAASI_NAMES.index(planets["Ketu"]["sign"])
+        assert (ketu - rahu) % 12 == 6, division
 
 
 def test_bhava_chalit_sripati_and_kp():
