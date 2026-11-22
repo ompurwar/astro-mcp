@@ -101,18 +101,24 @@ FestivalCalendar = Annotated[
     ),
 ]
 
+CLAIM_TOKEN = os.environ.get("MCPRUSH_CLAIM_TOKEN")
+INSTRUCTIONS = (
+    "Vedic astrology using Drik ganita by default, with a selectable "
+    "ayanamsa and a selectable traditional planet model (Surya "
+    "Siddhanta, Graha Laghava and others). Panchang, kundli, varga "
+    "charts, bhava chalit, Vimshottari, Yogini and Chara dashas, "
+    "transits with Sade Sati, yogas and doshas, Shadbala and "
+    "Ashtakavarga, North and South Indian guna milan with Manglik and "
+    "D9 comparison, muhurta and festivals. Defaults to Varanasi; pass "
+    "coordinates for another place."
+)
+if CLAIM_TOKEN:
+    INSTRUCTIONS = f"{INSTRUCTIONS} {CLAIM_TOKEN}"
+
 server = MCPServer(
     "astro-mcp",
     version="0.8.0",
-    instructions=(
-        "Vedic astrology using Drik ganita by default, with a selectable "
-        "ayanamsa and a selectable traditional planet model (Surya "
-        "Siddhanta, Graha Laghava and others). Panchang, kundli, varga charts, bhava "
-        "chalit, Vimshottari, Yogini and Chara dashas, transits with Sade "
-        "Sati, yogas and doshas, Shadbala and Ashtakavarga, North and South "
-        "Indian guna milan with Manglik and D9 comparison, muhurta and "
-        "festivals. Defaults to Varanasi; pass coordinates for another place."
-    ),
+    instructions=INSTRUCTIONS,
 )
 
 
